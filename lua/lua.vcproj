@@ -146,6 +146,22 @@
 		<File
 			RelativePath=".\lapi.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="Release|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lapi.h"
@@ -154,6 +170,22 @@
 		<File
 			RelativePath=".\lauxlib.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="Release|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lauxlib.h"
@@ -162,10 +194,42 @@
 		<File
 			RelativePath=".\lbaselib.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="Release|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lcode.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
+			<FileConfiguration
+				Name="Release|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lcode.h"
@@ -174,10 +238,26 @@
 		<File
 			RelativePath=".\ldblib.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\ldebug.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\ldebug.h"
@@ -186,6 +266,14 @@
 		<File
 			RelativePath=".\ldo.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\ldo.h"
@@ -194,10 +282,26 @@
 		<File
 			RelativePath=".\ldump.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lfunc.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lfunc.h"
@@ -206,6 +310,14 @@
 		<File
 			RelativePath=".\lgc.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lgc.h"
@@ -214,14 +326,38 @@
 		<File
 			RelativePath=".\linit.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\liolib.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\llex.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\llex.h"
@@ -234,10 +370,26 @@
 		<File
 			RelativePath=".\lmathlib.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lmem.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lmem.h"
@@ -246,10 +398,26 @@
 		<File
 			RelativePath=".\loadlib.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lobject.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lobject.h"
@@ -258,6 +426,14 @@
 		<File
 			RelativePath=".\lopcodes.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lopcodes.h"
@@ -266,10 +442,26 @@
 		<File
 			RelativePath=".\loslib.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lparser.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lparser.h"
@@ -278,6 +470,14 @@
 		<File
 			RelativePath=".\lstate.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lstate.h"
@@ -286,6 +486,14 @@
 		<File
 			RelativePath=".\lstring.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lstring.h"
@@ -294,10 +502,26 @@
 		<File
 			RelativePath=".\lstrlib.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\ltable.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\ltable.h"
@@ -306,10 +530,26 @@
 		<File
 			RelativePath=".\ltablib.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\ltm.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\ltm.h"
@@ -330,6 +570,14 @@
 		<File
 			RelativePath=".\lundump.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lundump.h"
@@ -338,6 +586,14 @@
 		<File
 			RelativePath=".\lvm.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lvm.h"
@@ -346,6 +602,14 @@
 		<File
 			RelativePath=".\lzio.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 		<File
 			RelativePath=".\lzio.h"
@@ -354,6 +618,14 @@
 		<File
 			RelativePath=".\print.c"
 			>
+			<FileConfiguration
+				Name="Debug|Win32"
+				>
+				<Tool
+					Name="VCCLCompilerTool"
+					CompileAs="2"
+				/>
+			</FileConfiguration>
 		</File>
 	</Files>
 	<Globals>
