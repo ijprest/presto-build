@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 10.00
 # Visual Studio 2008
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "make", "make.vcproj", "{7216C55A-2127-4A1B-BAE0-2C03D3897176}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "presto", "presto.vcproj", "{7216C55A-2127-4A1B-BAE0-2C03D3897176}"
 	ProjectSection(ProjectDependencies) = postProject
 		{0DA1C207-E10C-4FBA-B960-6A704D5C7D7E} = {0DA1C207-E10C-4FBA-B960-6A704D5C7D7E}
 	EndProjectSection

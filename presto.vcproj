@@ -2,7 +2,7 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9.00"
-	Name="make"
+	Name="presto"
 	ProjectGUID="{7216C55A-2127-4A1B-BAE0-2C03D3897176}"
 	RootNamespace="make"
 	Keyword="Win32Proj"
