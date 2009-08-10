@@ -9,27 +9,20 @@ make.debug_msg = function(s) end
 local __target = {}
 local __is_target = {}
 __target[__is_target] = true
-__target.mt = {
-	__index = function(self,key)
-		return __target[key]
-	end
-}
+__target.mt = { __index = __target }
 
-
---[[SDOC---------------------------------------------------------------------
+--[[-------------------------------------------------------------------------
 	Name: 	__target:new
 	Action:	Constructor
----------------------------------------------------------------------EDOC]]--
+-------------------------------------------------------------------------]]--
 function __target:new(t)
 	t = t or {}
 	t.deps = {}
 	if self == target then
 		-- Base class is a special case
-		make.debug_msg{"instantiating base class..."}
 		setmetatable(t, __target.mt)
 	else
 		-- this forms the basis of all our inheritance
-		make.debug_msg{"instantiating derived class..."}
 		self.__index = self
 		setmetatable(t, self)
 	end
@@ -37,10 +30,10 @@ function __target:new(t)
 end
 
 
---[[SDOC---------------------------------------------------------------------
+--[[-------------------------------------------------------------------------
 	Name: 	__target:depends_on
 	Action:	Add dependencies to the target
----------------------------------------------------------------------EDOC]]--
+-------------------------------------------------------------------------]]--
 function __target:depends_on(deps_list)
 	for k,v in ipairs(deps_list or {}) do
 		-- string is assumed to be the name of a dependency
@@ -61,10 +54,10 @@ function __target:depends_on(deps_list)
 	end
 end
 
---[[SDOC---------------------------------------------------------------------
+--[[-------------------------------------------------------------------------
 	Name: 	__target:check_for_cycle()
 	Action:	Traverse the dependency hierarchy and ensure there are no cycles
----------------------------------------------------------------------EDOC]]--
+-------------------------------------------------------------------------]]--
 function __target:check_for_cycle(t, d, i)
 	if self.name == t then error("cyclical dependency on target '"..t.."' . '"..d.."' . '"..t.."'",i+2) end
 	for k,v in pairs(self.deps) do target[k]:check_for_cycle(t,d,i+1) end
@@ -75,10 +68,10 @@ end
 -- for derived target types
 target = {}
 setmetatable(target, {
-	--[[SDOC---------------------------------------------------------------------
+	--[[-------------------------------------------------------------------------
 		Name: 		target:__index
 		Action:		Read access to "target" table
-	---------------------------------------------------------------------EDOC]]--
+	-------------------------------------------------------------------------]]--
 	__index = function(self, key)
 		-- enforce backslash policy
 		if string.match(key,"\\") then error("target name should not contain backslashes",2) end
@@ -87,10 +80,10 @@ setmetatable(target, {
 		return __target[key] or target:new{name=key}
 	end,
 
-	--[[SDOC---------------------------------------------------------------------
+	--[[-------------------------------------------------------------------------
 		Name: 		target:__newindex
 		Action:		Write access to "target" table
-	---------------------------------------------------------------------EDOC]]--
+	-------------------------------------------------------------------------]]--
 	__newindex = function(self, key, value)
 		make.debug_msg{"Setting", key, value}
 		-- enforce backslash policy
@@ -113,10 +106,10 @@ function __target:exists()
 	return make.file.exists(self.name)
 end
 
-local status = { none = 0, updated = 1, error = 2 }
+make.status = { none = 0, updated = 1, error = 2 }
 
 function __target:bring_up_to_date()
-	if self.updated then return status.updated; end -- already done!
+	if self.updated then return make.status.updated; end -- already done!
 	if not(self.deps_newer) then self.deps_newer = {} end
 
 	-- we must build if we don't exist yet
@@ -127,22 +120,22 @@ function __target:bring_up_to_date()
 		-- update the dependency
 		local dep = target[dep_name]
 		local dep_status = dep:bring_up_to_date()
-		if dep_status == status.updated then
+		if dep_status == make.status.updated then
 			-- dependency was updated; we must build
 			must_build = true; self.deps_newer[dep_name] = true
-		elseif dep_status == status.none then
+		elseif dep_status == make.status.none then
 			-- dependency wasn't updated, but we might still need
 			-- to build if it's newer
 			local self_timestamp = self:timestamp(dep)
 			local dep_timestamp = dep:timestamp()
-			if self_timestamp <= dep_timestamp then
+			if self_timestamp < dep_timestamp then
 				must_build = true; self.deps_newer[dep_name] = true
 			end
-		elseif dep_status == status.error then
+		elseif dep_status == make.status.error then
 			-- ummm...
 			error("error updating target '".. dep.name .."'")
 		else
-			error("unknown status value '".. dep_status .."'")
+			error("unknown make.status value '".. dep_status .."'")
 		end
 	end
 
@@ -152,22 +145,34 @@ function __target:bring_up_to_date()
 			-- run the update command
 			self.command_status = self:command()
 			self.updated = true
-			return status.updated
+			return make.status.updated
 		else
 			-- don't know how to build; error
 			error("no rule to make target '".. self.name .."'")
-			return status.error
+			return make.status.error
 		end
 	end
 
 	-- no update was necessary
-	return status.none
+	return make.status.none
 end
 
 
 
 
 
+--
+-- Phony targets don't correspond to actual files on disk
+--
+phony_target = target:new{}
+-- "empty" command to run by default, so presto won't raise
+-- an error if the command isn't defined
+phony_target.command = function() end
+-- always considered to not exist (even if there happened
+-- to be a file with the same name); as a result, phony
+-- targets will always try to be updated
+phony_target.exists = function() return false; end
+phony_target.timestamp = function(self) return 0; end
 
 
 
