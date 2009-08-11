@@ -4,7 +4,7 @@
 	Version="9.00"
 	Name="presto"
 	ProjectGUID="{7216C55A-2127-4A1B-BAE0-2C03D3897176}"
-	RootNamespace="make"
+	RootNamespace="presto"
 	Keyword="Win32Proj"
 	TargetFrameworkVersion="196613"
 	>
@@ -22,7 +22,6 @@
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
 			CharacterSet="1"
-			BuildLogFile="$(IntDir)\$(InputName).html"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -48,7 +47,6 @@
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
 				UsePrecompiledHeader="0"
-				ProgramDataBaseFileName="$(IntDir)\$(InputName).pdb"
 				WarningLevel="3"
 				DebugInformationFormat="4"
 			/>
@@ -65,7 +63,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="lua.lib shlwapi.lib"
 				LinkIncremental="2"
-				AdditionalLibraryDirectories="&quot;$(OutDir)&quot;"
+				AdditionalLibraryDirectories="$(OutDir)"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				TargetMachine="1"
@@ -101,7 +99,6 @@
 			ConfigurationType="1"
 			CharacterSet="1"
 			WholeProgramOptimization="1"
-			BuildLogFile="$(IntDir)\$(InputName).html"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -127,7 +124,6 @@
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
-				ProgramDataBaseFileName="$(IntDir)\$(InputName).pdb"
 				WarningLevel="3"
 				DebugInformationFormat="3"
 			/>
@@ -144,7 +140,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="lua.lib shlwapi.lib"
 				LinkIncremental="1"
-				AdditionalLibraryDirectories="&quot;$(OutDir)&quot;"
+				AdditionalLibraryDirectories="$(OutDir)"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				OptimizeReferences="2"
