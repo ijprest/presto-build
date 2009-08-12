@@ -8,6 +8,8 @@
 extern "C" {
 #include "md5.h"
 }
+#include <io.h>
+#include <fcntl.h>
 
 /* macro to `unsign' a character */
 #define uchar(c)        ((unsigned char)(c))
@@ -31,17 +33,19 @@ inline char* _lua_topath(char* out, const char* in, size_t* len)
 #define lua_getpath(L, stack_pos, len) \
 	((lua_getpath_s = luaL_checklstring(L, stack_pos, len)), lua_topath( lua_getpath_s, len ))
 
-inline void lua_pushpath(lua_State *L, char* path)
+inline void lua_pushpath(lua_State *L, const char* path)
 {
-	size_t len = strlen(path);
 	// swap slashes back
-	for (size_t i=0; i<len; i++)
-		if(path[i] == '\\') path[i] = '/';
-	// send the result to lua
   luaL_Buffer b;
 	luaL_buffinit(L, &b);
-  for (size_t i=0; i<len; i++)
-    luaL_addchar(&b, uchar(path[i]));
+	size_t len = strlen(path);
+	for (size_t i=0; i<len; i++)
+	{
+		if(path[i] == '\\') 
+			luaL_addchar(&b, '/');
+		else
+			luaL_addchar(&b, uchar(path[i]));
+	}
   luaL_pushresult(&b);
 }
 
@@ -459,6 +463,150 @@ static int make_file_md5(lua_State *L) {
 	return 1;
 }
 
+static int make_path_to_os(lua_State *L) {
+	lua_path_init();
+	size_t l; char* path_in = lua_getpath(L, 1, &l);	// this will convert to backslashes
+	lua_pushstring(L,path_in);
+	return 1;
+}
+
+static int make_path_from_os(lua_State *L) {
+	size_t l; 
+	const char* path_in = luaL_checklstring(L, 1, &l);
+	lua_pushpath(L, path_in);	// this will convert to regular slashes
+	return 1;
+}
+
+static int make_proc_spawn(lua_State *L) {
+	size_t l; 
+	const char* path_in = luaL_checklstring(L, 1, &l);
+	char* command_line = (char*)_alloca(l+1);
+	strcpy(command_line, path_in);
+	const char* env = NULL;
+
+	// Create the child output pipe (inheritable)
+	HANDLE hOutputReadTmp, hOutputWrite;
+	SECURITY_ATTRIBUTES sa = { sizeof(sa) };
+	sa.bInheritHandle = TRUE;
+	if(!CreatePipe(&hOutputReadTmp, &hOutputWrite, &sa, 0)) // TODO: should buffer size be bigger?
+		luaL_error(L, "error creating pipe");
+	// Duplicate the pipe for stderr; this way, if the child 
+	// process closes one of stdout/stderr, the other still works.
+	HANDLE hErrorWrite;
+  if(!DuplicateHandle(GetCurrentProcess(), hOutputWrite, GetCurrentProcess(), &hErrorWrite, 0, TRUE, DUPLICATE_SAME_ACCESS))
+     luaL_error(L, "error duplicating pipe handle");
+  // Duplicate the output read handle as uninheritable; otherwise
+  // the child inherits it and a non-closeable handles to the pipe
+  // is created.
+	HANDLE hOutputRead;
+  if(!DuplicateHandle(GetCurrentProcess(), hOutputReadTmp, GetCurrentProcess(), &hOutputRead, 0, FALSE, DUPLICATE_SAME_ACCESS))
+    luaL_error(L, "error duplicating pipe handle");
+  // Close the inheritable copy
+  if(!CloseHandle(hOutputReadTmp)) 
+		luaL_error(L, "error closing pipe handle");
+
+	// Launch the child process
+	STARTUPINFOA si = { sizeof(si) };
+	si.dwFlags = STARTF_USESTDHANDLES;
+	si.hStdInput = INVALID_HANDLE_VALUE; // no input!
+	si.hStdOutput = hOutputWrite;
+	si.hStdError = hErrorWrite;
+	PROCESS_INFORMATION pi = {};
+	CreateProcessA(NULL, command_line, NULL, NULL, TRUE, 0, (void*)env, NULL, &si, &pi);
+	// Close unnecessary thread handle
+	CloseHandle(pi.hThread);
+
+	// Close the pipe handles; we make sure to not maintain any
+	// handles to the write end of the pipes so that the child
+	// can exit properly.
+	if(!CloseHandle(hOutputWrite) || !CloseHandle(hErrorWrite)) 
+		luaL_error(L, "error closing pipe handle");
+
+	// Return the process information to lua
+	lua_newtable(L);
+	lua_pushstring(L, "procid");
+	lua_pushnumber(L, (DWORD)pi.hProcess);
+	lua_settable(L, -3);
+	lua_pushstring(L, "procread");
+	lua_pushnumber(L, (DWORD)hOutputRead);
+	lua_settable(L, -3);
+	return 1;
+}
+
+static int make_proc_flushio(lua_State *L) {
+	luaL_checktype(L, 1, LUA_TTABLE);
+	lua_pushstring(L, "procread");
+	lua_gettable(L, 1);
+	if(lua_isnil(L,-1)) 
+		luaL_error(L, "not a proper process descriptor");
+	HANDLE hReadHandle = (HANDLE)(DWORD)luaL_checknumber(L, -1);
+	lua_pop(L,1);
+
+	DWORD dwAvailable;
+	if(!PeekNamedPipe(hReadHandle, NULL, 0, NULL, &dwAvailable, NULL))
+		goto error;
+	if(dwAvailable > 0)
+	{
+		char* buffer = (char*)_alloca(dwAvailable+1);
+		buffer[dwAvailable] = 0;
+		DWORD dwRead;
+		if(!ReadFile(hReadHandle, buffer, dwAvailable, &dwRead, NULL))
+			goto error;
+
+		char* pos = buffer;
+		while(dwAvailable) {
+			if(*pos == '\r') {
+				*pos = 0;
+
+				lua_pushstring(L, "print");
+				lua_gettable(L, 1);
+				luaL_checktype(L, -1, LUA_TFUNCTION);
+				lua_pushstring(L, buffer);
+				lua_call(L, 1, 0);
+
+				if(pos[1] == '\n') { dwAvailable--; pos++; }
+				buffer = pos + 1;
+			}
+			dwAvailable--; pos++;
+		}
+		if(buffer != pos) {
+			lua_pushstring(L, "print");
+			lua_gettable(L, 1);
+			luaL_checktype(L, -1, LUA_TFUNCTION);
+			lua_pushstring(L, buffer);
+			lua_call(L, 1, 0);
+		}
+
+		//if(!WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), buffer, dwRead, NULL, NULL))
+		//_setmode(_fileno(stdout), _O_BINARY);
+		//if(!fwrite(buffer, 1, dwRead, stdout))
+		//	luaL_error(L, "error writing to stdout");
+		//_setmode(_fileno(stdout), _O_TEXT);
+	}	
+	return 0;
+
+error:
+	if(GetLastError() != ERROR_BROKEN_PIPE)
+		luaL_error(L, "error reading from pipe");
+
+	// this is the normal exit path; close our handles and exit
+	lua_pushstring(L, "procid");
+	lua_gettable(L, 1);
+	HANDLE hProcess = (HANDLE)(DWORD)luaL_checknumber(L, -1);
+	lua_pop(L,1);
+
+  DWORD result;
+  GetExitCodeProcess(hProcess, &result);
+
+	lua_pushstring(L, "exit_code");
+	lua_pushnumber(L, result);
+	lua_settable(L, 1);
+
+	CloseHandle(hReadHandle);
+	CloseHandle(hProcess);
+	return 0;
+}
+
 static const luaL_Reg make_pathlib[] = {
   {"canonicalize", make_path_canonicalize},		// make.path.canonicalize
 	{"add_slash", make_path_add_slash},					// make.path.add_slash
@@ -479,6 +627,8 @@ static const luaL_Reg make_pathlib[] = {
 	{"full",make_path_full},										// make.path.full
 	{"glob",make_path_glob},										// make.path.glob
 	{"where",make_path_where},									// make.path.where
+	{"to_os",make_path_to_os},									// make.path.to_os
+	{"from_os",make_path_from_os},							// make.path.from_os
   {NULL, NULL}
 };
 static const luaL_Reg make_filelib[] = {
@@ -501,6 +651,11 @@ static const luaL_Reg make_dirlib[] = {
 	{"rd",make_path_rd},												// make.dir.rd
   {NULL, NULL}
 };
+static const luaL_Reg make_proclib[] = {
+	{"spawn", make_proc_spawn},									// make.proc.spawn
+	{"flushio", make_proc_flushio},							// make.proc.flushio
+  {NULL, NULL}
+};
 static const luaL_Reg make_rootlib[] = {
 	{"now", make_now},													// make.now
 	{"md5", make_md5},													// make.md5
@@ -512,6 +667,10 @@ static const luaL_Reg make_rootlib[] = {
 ** Open make library
 */
 LUALIB_API int luaopen_make (lua_State *L) {
+	
+	luaL_newmetatable(L,"PROC*");
+
+
 	// FILETIME is a 64-bit int, representing 100-nanosecond increments since 1/1/1601.
 	// We want our numbers to fit nicely into a double without losing any precision, so
 	// we subtract out the start-time.
@@ -548,7 +707,10 @@ LUALIB_API int luaopen_make (lua_State *L) {
 	luaL_register(L, LUA_MAKELIBNAME ".path", make_pathlib);
 	luaL_register(L, LUA_MAKELIBNAME ".file", make_filelib);
 	luaL_register(L, LUA_MAKELIBNAME ".dir", make_dirlib);
+	luaL_register(L, LUA_MAKELIBNAME ".proc", make_proclib);
 	luaL_register(L, LUA_MAKELIBNAME, make_rootlib);
+
+	//Sleep(30000);
   return 1;
 }
 
