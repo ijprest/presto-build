@@ -19,7 +19,7 @@ make.status = { none = 0, updated = 1, error = 2 }
 -------------------------------------------------------------------------]]--
 function __target:new(t)
 	t = t or {}
-	t.deps = {}
+	t.deps = make.util.target_list:new{}
 	if self == target then
 		-- Base class is a special case
 		setmetatable(t, __target.mt)
@@ -28,6 +28,7 @@ function __target:new(t)
 		self.__index = self
 		setmetatable(t, self)
 	end
+	if t[1] then target[t[1]] = t; t[1] = nil; end
 	return t
 end
 
@@ -71,7 +72,7 @@ end
 -------------------------------------------------------------------------]]--
 function __target:bring_up_to_date()
 	if self.updated then return make.status.updated; end -- already done!
-	if not(self.deps_newer) then self.deps_newer = {} end
+	if not(self.deps_newer) then self.deps_newer = make.util.target_list:new{}; end
 
 	-- we must build if we don't exist yet
 	local must_build = not(self:exists())
@@ -157,7 +158,7 @@ setmetatable(target, {
 		-- enforce backslash policy
 		if string.match(key,"\\") then error("target name should not contain backslashes",2) end
 		-- prevent redefining protected members (e.g., "target.new")
-		if __target[key] ~= nil then error("cannot modify protected value",2) end
+		if __target[key] ~= nil then error("cannot modify protected value (or existing target) '"..tostring(key).."'",2) end
 		-- ensure that everything added to the table is actually a "target" object
 		if type(value) ~= "table" or not(value[__is_target]) then error("rvalue is not a target",2) end
 		-- first target specified is the "default goal" target
@@ -252,6 +253,48 @@ end
 
 
 --
+-- Utility functions
+--
+make.util = {}
+make.util.target_list = {}
+make.util.target_list_mt = { __index = make.util.target_list }
+setmetatable(make.util.target_list, make.util.target_list_mt)
+make.util.target_list.new = function(self, t)
+	return setmetatable(t or {}, make.util.target_list_mt)
+end
+
+make.util.target_list_mt.__tostring = function(self)
+	local txt = ""
+	for dep_name in pairs(self) do
+		if #txt > 0 then txt = txt .. " "; end
+		txt = txt .. make.path.quote(dep_name)
+	end
+	return txt
+end
+
+--[[-------------------------------------------------------------------------
+	Name: 	make.util.target_list.filter, make.util.target_list.filter_out
+	Action:	filter a dependency list by the specified extension
+-------------------------------------------------------------------------]]--
+function make.util.target_list:filter(ext)
+	local filtered = make.util.target_list:new{}
+	for dep_name,v in pairs(self) do
+		if make.path.get_ext(dep_name) == ext then filtered[dep_name] = v; end
+	end
+	return filtered
+end
+function make.util.target_list:filter_out(ext)
+	local filtered = make.util.target_list:new{}
+	for dep_name,v in pairs(self) do
+		if make.path.get_ext(dep_name) ~= ext then filtered[dep_name] = v; end
+	end
+	return filtered
+end
+
+
+
+
+--
 -- Phony targets don't correspond to actual files on disk
 --
 phony_target = target:new{}
@@ -263,7 +306,6 @@ phony_target.command = function() end
 -- targets will always try to be updated
 phony_target.exists = function() return false; end
 phony_target.timestamp = function(self) return 0; end
-
 
 
 
