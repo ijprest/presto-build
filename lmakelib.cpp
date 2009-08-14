@@ -703,14 +703,12 @@ LUALIB_API int luaopen_make (lua_State *L) {
 	lua_settable(L, -3); // make.env
 	lua_setfield(L, LUA_GLOBALSINDEX, LUA_MAKELIBNAME);
 
-  //luaL_register(L, LUA_MAKELIBNAME, makelib);
 	luaL_register(L, LUA_MAKELIBNAME ".path", make_pathlib);
 	luaL_register(L, LUA_MAKELIBNAME ".file", make_filelib);
 	luaL_register(L, LUA_MAKELIBNAME ".dir", make_dirlib);
 	luaL_register(L, LUA_MAKELIBNAME ".proc", make_proclib);
 	luaL_register(L, LUA_MAKELIBNAME, make_rootlib);
 
-	//Sleep(30000);
   return 1;
 }
 

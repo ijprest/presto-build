@@ -352,6 +352,8 @@ static int pmain (lua_State *L) {
 	luaopen_make(L); /* open custom "make" library */
 	dolibrary(L, "mkinit"); /* require mkinit library */
   lua_gc(L, LUA_GCRESTART, 0);
+
+	// Start the normal lua.exe loop
   s->status = handle_luainit(L);
   if (s->status != 0) return 0;
   script = collectargs(argv, &has_i, &has_v, &has_e);
@@ -375,6 +377,14 @@ static int pmain (lua_State *L) {
     }
     else dofile(L, NULL);  /* executes stdin as a file */
   }
+
+	// call: make.update_goals()
+	lua_getglobal(L, "make");
+	lua_getfield(L,-1,"update_goals");
+	lua_remove(L,-2); // remove "make"
+	luaL_checktype(L, -1, LUA_TFUNCTION);
+	lua_call(L,0,0);
+
   return 0;
 }
 
