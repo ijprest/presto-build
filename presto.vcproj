@@ -212,6 +212,10 @@
 			RelativePath=".\md5.h"
 			>
 		</File>
+		<File
+			RelativePath=".\pipeex.c"
+			>
+		</File>
 	</Files>
 	<Globals>
 	</Globals>

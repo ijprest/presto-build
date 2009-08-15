@@ -273,6 +273,9 @@ make.jobs.dispatch = function(self)
 		--print("make.jobs.dispatch: dispatched "..tostring(self.count).." jobs")
 		if job_count ~= self.count and self.count < self.slots then break; end -- open slots
 		if job_count == 0 then break; end -- no more running jobs
+
+		-- wait for some change in job status
+		make.proc.wait(waiting)
 	end
 end
 
@@ -311,7 +314,7 @@ make.run = function(command, printfn)
 	local proc = make.proc.spawn(command)
 	proc.print = printfn or print
 	-- pipe all output until the process exits
-	while proc.exit_code == nil do
+	while make.proc.exit_code(proc) == nil do
 		coroutine.yield(proc)
 		make.proc.flushio(proc)
 	end

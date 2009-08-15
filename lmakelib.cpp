@@ -10,6 +10,16 @@ extern "C" {
 }
 #include <io.h>
 #include <fcntl.h>
+#include <vector>
+
+extern "C" {
+BOOL APIENTRY MyCreatePipeEx(OUT LPHANDLE lpReadPipe, 
+														 OUT LPHANDLE lpWritePipe, 
+														 IN LPSECURITY_ATTRIBUTES lpPipeAttributes,
+														 IN DWORD nSize,
+														 DWORD dwReadMode,
+														 DWORD dwWriteMode);
+}
 
 /* macro to `unsign' a character */
 #define uchar(c)        ((unsigned char)(c))
@@ -477,6 +487,16 @@ static int make_path_from_os(lua_State *L) {
 	return 1;
 }
 
+struct process {
+	OVERLAPPED olp;
+	HANDLE hProcess;
+	HANDLE hOutputRead;
+	DWORD dwExitCode;
+	bool bWaiting;
+	char buffer[1024];
+	char leftovers[1024];
+};
+
 static int make_proc_spawn(lua_State *L) {
 	size_t l; 
 	const char* path_in = luaL_checklstring(L, 1, &l);
@@ -488,7 +508,7 @@ static int make_proc_spawn(lua_State *L) {
 	HANDLE hOutputReadTmp, hOutputWrite;
 	SECURITY_ATTRIBUTES sa = { sizeof(sa) };
 	sa.bInheritHandle = TRUE;
-	if(!CreatePipe(&hOutputReadTmp, &hOutputWrite, &sa, 0)) // TODO: should buffer size be bigger?
+	if(!MyCreatePipeEx(&hOutputReadTmp, &hOutputWrite, &sa, 0, FILE_FLAG_OVERLAPPED, 0)) // TODO: should buffer size be bigger?
 		luaL_error(L, "error creating pipe");
 	// Duplicate the pipe for stderr; this way, if the child 
 	// process closes one of stdout/stderr, the other still works.
@@ -496,7 +516,7 @@ static int make_proc_spawn(lua_State *L) {
   if(!DuplicateHandle(GetCurrentProcess(), hOutputWrite, GetCurrentProcess(), &hErrorWrite, 0, TRUE, DUPLICATE_SAME_ACCESS))
      luaL_error(L, "error duplicating pipe handle");
   // Duplicate the output read handle as uninheritable; otherwise
-  // the child inherits it and a non-closeable handles to the pipe
+  // the child inherits it and a non-closeable handle to the pipe
   // is created.
 	HANDLE hOutputRead;
   if(!DuplicateHandle(GetCurrentProcess(), hOutputReadTmp, GetCurrentProcess(), &hOutputRead, 0, FALSE, DUPLICATE_SAME_ACCESS))
@@ -522,88 +542,162 @@ static int make_proc_spawn(lua_State *L) {
 	if(!CloseHandle(hOutputWrite) || !CloseHandle(hErrorWrite)) 
 		luaL_error(L, "error closing pipe handle");
 
-	// Return the process information to lua
+	// Create a new USERDATA to hold the process information
 	lua_newtable(L);
-	lua_pushstring(L, "procid");
-	lua_pushnumber(L, (DWORD)pi.hProcess);
-	lua_settable(L, -3);
-	lua_pushstring(L, "procread");
-	lua_pushnumber(L, (DWORD)hOutputRead);
-	lua_settable(L, -3);
+	process* proc = (process*)lua_newuserdata(L, sizeof(process));
+	memset(proc, 0, sizeof(*proc));
+	proc->hOutputRead = hOutputRead;
+	proc->hProcess = pi.hProcess;
+	proc->olp.hEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
+	lua_setfield(L, -2, "data");
 	return 1;
+}
+
+static int make_proc_exitcode(lua_State *L) {
+	luaL_checktype(L, 1, LUA_TTABLE);
+	lua_getfield(L, 1, "data");
+	process* p = (process*)lua_touserdata(L,-1);
+	luaL_argcheck(L, p != NULL && lua_objlen(L,-1) == sizeof(process), 1, "'process' expected");
+	if(p->hProcess != INVALID_HANDLE_VALUE)
+		lua_pushnil(L);
+	else
+		lua_pushnumber(L, p->dwExitCode);
+	return 1;
+}
+
+static int make_proc_flushio_helper(lua_State *L, process* p, DWORD dwRead) {
+	p->buffer[dwRead] = 0;
+	char *pos = p->buffer, *line_start = p->buffer;
+	while(dwRead && *pos) {
+		if(*pos == '\r') {
+			// hit the end of a line
+			*pos = 0;
+
+			// get the "print" function from the process table
+			lua_getfield(L, 1, "print");
+			luaL_checktype(L, -1, LUA_TFUNCTION);
+
+			// build a string; use the remaining portion from the 
+			// last read, plus everything up to the CR/LF this time...
+			luaL_Buffer b;
+			luaL_buffinit(L, &b);
+			luaL_addstring(&b, p->leftovers);
+			luaL_addstring(&b, line_start);
+			luaL_pushresult(&b);
+			lua_call(L, 1, 0);
+			// erase the leftovers
+			p->leftovers[0] = 0;
+
+			// Increment our pointers
+			if(pos[1] == '\n') { dwRead--; pos++; }
+			line_start = pos + 1;
+		}
+		dwRead--; pos++;
+	}
+
+	// we have some leftover data; copy it to the process buffer
+	// to be written next time
+	if(line_start != pos)
+		strcat(p->leftovers, line_start); // bug waiting to happen
+
+	return 0;
 }
 
 static int make_proc_flushio(lua_State *L) {
 	luaL_checktype(L, 1, LUA_TTABLE);
-	lua_pushstring(L, "procread");
-	lua_gettable(L, 1);
-	if(lua_isnil(L,-1)) 
-		luaL_error(L, "not a proper process descriptor");
-	HANDLE hReadHandle = (HANDLE)(DWORD)luaL_checknumber(L, -1);
-	lua_pop(L,1);
+	lua_getfield(L, 1, "data");
+	process* p = (process*)lua_touserdata(L,-1);
+	luaL_argcheck(L, p != NULL && lua_objlen(L,-1) == sizeof(process), 1, "'process' expected");
+	if(p->hProcess == INVALID_HANDLE_VALUE)
+		return 0; // process is already done!
 
-	DWORD dwAvailable;
-	if(!PeekNamedPipe(hReadHandle, NULL, 0, NULL, &dwAvailable, NULL))
-		goto error;
-	if(dwAvailable > 0)
-	{
-		char* buffer = (char*)_alloca(dwAvailable+1);
-		buffer[dwAvailable] = 0;
-		DWORD dwRead;
-		if(!ReadFile(hReadHandle, buffer, dwAvailable, &dwRead, NULL))
+	DWORD dwRead;
+	if(p->bWaiting) {
+		//printf("----------- Waiting on: %x\n", p->hOutputRead);
+		if(!GetOverlappedResult(p->hOutputRead, &p->olp, &dwRead, FALSE)) {
 			goto error;
-
-		char* pos = buffer;
-		while(dwAvailable) {
-			if(*pos == '\r') {
-				*pos = 0;
-
-				lua_pushstring(L, "print");
-				lua_gettable(L, 1);
-				luaL_checktype(L, -1, LUA_TFUNCTION);
-				lua_pushstring(L, buffer);
-				lua_call(L, 1, 0);
-
-				if(pos[1] == '\n') { dwAvailable--; pos++; }
-				buffer = pos + 1;
-			}
-			dwAvailable--; pos++;
+		} else {
+			// yay! we got data
+			//printf("----------- Overlapped read was successful: %x, %d bytes\n", p->hOutputRead, dwRead);
+			make_proc_flushio_helper(L, p, dwRead);
 		}
-		if(buffer != pos) {
-			lua_pushstring(L, "print");
-			lua_gettable(L, 1);
-			luaL_checktype(L, -1, LUA_TFUNCTION);
-			lua_pushstring(L, buffer);
-			lua_call(L, 1, 0);
-		}
+		p->bWaiting = false;
+	}
 
-		//if(!WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), buffer, dwRead, NULL, NULL))
-		//_setmode(_fileno(stdout), _O_BINARY);
-		//if(!fwrite(buffer, 1, dwRead, stdout))
-		//	luaL_error(L, "error writing to stdout");
-		//_setmode(_fileno(stdout), _O_TEXT);
-	}	
-	return 0;
+	//printf("----------- Trying to read from handle: %x\n", p->hOutputRead);
+
+	// try to read some more data
+	while(ReadFile(p->hOutputRead, p->buffer, sizeof(p->buffer)-1, &dwRead, &p->olp)) {
+		//printf("----------- Got Data: %x, %d bytes\n", p->hOutputRead, dwRead);
+		// we got data right away
+		make_proc_flushio_helper(L, p, dwRead);
+		p->bWaiting = false;
+		return 0;
+	}
 
 error:
-	if(GetLastError() != ERROR_BROKEN_PIPE)
-		luaL_error(L, "error reading from pipe");
+	DWORD dwError = GetLastError();
+	switch(dwError) {
+		case ERROR_BROKEN_PIPE:	{
+			// this is the normal exit path; close our handles and exit
+			//printf("----------- Exitted normally: %x\n", p->hOutputRead);
+			WaitForSingleObject(p->hProcess, INFINITE); // should already be done
+			GetExitCodeProcess(p->hProcess, &p->dwExitCode);
+			CloseHandle(p->hOutputRead);
+			CloseHandle(p->hProcess);
+			CloseHandle(p->olp.hEvent);
+			p->hProcess = INVALID_HANDLE_VALUE;
+			p->bWaiting = false;
+			//printf("----------- Done: %x\n", p->hOutputRead);
+			break;
+		}
+		case ERROR_IO_INCOMPLETE:
+		case ERROR_IO_PENDING: {
+			// This is normal; there currently isn't any data to read, so 
+			// we'll come back and try again later
+			//printf("----------- I/O pending: %x\n", p->hOutputRead);
+			p->bWaiting = true;
+			break;
+		}
+		default: {
+			char str[MAX_PATH];
+			FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM,0,dwError,0,str,sizeof(str),NULL);
+			//printf("error reading from pipe: %d, %s", dwError, str);
+			luaL_error(L, "error reading from pipe: %d, %s", dwError, str);
+			break;
+		}
+	}
+	return 0;
+}
 
-	// this is the normal exit path; close our handles and exit
-	lua_pushstring(L, "procid");
-	lua_gettable(L, 1);
-	HANDLE hProcess = (HANDLE)(DWORD)luaL_checknumber(L, -1);
-	lua_pop(L,1);
+static int make_proc_wait(lua_State *L) {
+	luaL_checktype(L, 1, LUA_TTABLE);
 
-  DWORD result;
-  GetExitCodeProcess(hProcess, &result);
+	// loop over the input array and accumulate handles
+	std::vector<HANDLE> handles;
+	int pos = 1;
+	while(1) {
+		lua_pushnumber(L,pos++);
+		lua_gettable(L,1);
+		if(lua_isnil(L,-1)) 
+			break;
+		luaL_checktype(L, -1, LUA_TTABLE);
 
-	lua_pushstring(L, "exit_code");
-	lua_pushnumber(L, result);
-	lua_settable(L, 1);
+		// Get the process data
+		lua_getfield(L, -1, "data");
+		process* p = (process*)lua_touserdata(L,-1);
+		if(p == NULL || lua_objlen(L,-1) != sizeof(process))
+			luaL_error(L, "'process' expected");
 
-	CloseHandle(hReadHandle);
-	CloseHandle(hProcess);
+		handles.push_back(p->hProcess);
+		if(p->olp.hEvent != INVALID_HANDLE_VALUE)
+			handles.push_back(p->olp.hEvent);
+
+		lua_pop(L,1);
+	}
+
+	// Wait for one of the handles to be signalled
+	WaitForMultipleObjects(handles.size(), &handles[0], FALSE, INFINITE);
 	return 0;
 }
 
@@ -654,6 +748,8 @@ static const luaL_Reg make_dirlib[] = {
 static const luaL_Reg make_proclib[] = {
 	{"spawn", make_proc_spawn},									// make.proc.spawn
 	{"flushio", make_proc_flushio},							// make.proc.flushio
+	{"wait", make_proc_wait},										// make.proc.wait
+	{"exit_code", make_proc_exitcode},					// make.proc.exit_code
   {NULL, NULL}
 };
 static const luaL_Reg make_rootlib[] = {
