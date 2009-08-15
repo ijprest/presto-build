@@ -5,7 +5,11 @@
 make.debug_msg = function(s) end
 -- make.debug_msg = function(s) print(unpack(s)) end
 
-
+-- Handle case-insensitive environment
+setmetatable(make.env, {
+	__index = function(self, key) return rawget(self, string.upper(key)); end,
+	__newindex = function(self, key, value) return rawset(self, string.upper(key), value); end,
+})
 
 --[[-------------------------------------------------------------------------
 	Name: 	make.util.target_list
