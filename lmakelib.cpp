@@ -21,9 +21,6 @@ BOOL APIENTRY MyCreatePipeEx(OUT LPHANDLE lpReadPipe,
 														 DWORD dwWriteMode);
 }
 
-/* macro to `unsign' a character */
-#define uchar(c)        ((unsigned char)(c))
-
 /*
 ** "make.path" sub-library
 */
@@ -54,7 +51,7 @@ inline void lua_pushpath(lua_State *L, const char* path)
 		if(path[i] == '\\') 
 			luaL_addchar(&b, '/');
 		else
-			luaL_addchar(&b, uchar(path[i]));
+			luaL_addchar(&b, (unsigned char)(path[i]));
 	}
   luaL_pushresult(&b);
 }
@@ -498,11 +495,34 @@ struct process {
 };
 
 static int make_proc_spawn(lua_State *L) {
+	// retrieve the command-line
 	size_t l; 
 	const char* path_in = luaL_checklstring(L, 1, &l);
 	char* command_line = (char*)_alloca(l+1);
 	strcpy(command_line, path_in);
-	const char* env = NULL;
+
+	// retrieve the environment
+	char* env = NULL;
+	char env_buffer[32768];
+	if(!lua_isnil(L, 2)) {
+		luaL_checktype(L, 2, LUA_TTABLE);
+		env = env_buffer;
+
+		// loop over the table
+		lua_pushnil(L);
+		while(lua_next(L,2)) {
+			// get the environment variable name
+			const char* name = luaL_checkstring(L,-2);
+			while(*name) *env++ = *name++;
+			*env++ = '=';
+			const char* value = luaL_checkstring(L,-1);
+			while(*value) *env++ = *value++;
+			*env++ = 0;
+			lua_pop(L,1);
+		}
+		*env++ = 0; // double-null terminated
+		env = env_buffer;
+	}
 
 	// Create the child output pipe (inheritable)
 	HANDLE hOutputReadTmp, hOutputWrite;
@@ -786,7 +806,7 @@ LUALIB_API int luaopen_make (lua_State *L) {
 	while(*env) {
 		char* key = keyb;
 		while(*env != '=') { *key++ = toupper(*env++); } 
-		env++; *key = 0;
+		env++; *key = 0;	
 		char* value = valueb;
 		while(*env) { *value++ = *env++; }
 		env++; *value = 0;

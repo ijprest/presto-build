@@ -313,9 +313,9 @@ end
 	Name: 	make.run
 	Action:	Run an external program (within a job coroutine!)
 -------------------------------------------------------------------------]]--
-make.run = function(command, printfn)
+make.run = function(command, env, printfn)
 	-- spawn a new process
-	local proc = make.proc.spawn(command)
+	local proc = make.proc.spawn(command, env)
 	proc.print = printfn or print
 	-- pipe all output until the process exits
 	while make.proc.exit_code(proc) == nil do
