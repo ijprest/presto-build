@@ -1,17 +1,20 @@
-/*
-** $Id: lua.c,v 1.160.1.2 2007/12/28 15:32:23 roberto Exp $
-** Lua stand-alone interpreter
-** See Copyright Notice in lua.h
-*/
+/*SDOC***********************************************************************
+
+	Module:				make.cpp
+
+	Copyright (C) 2009 Ian Prest
+	http://ijprest.github.com/presto-build/license.html
+
+	Description:	Main entry point for the application
+
+***********************************************************************EDOC*/
 #include "stdafx.h"
 #include <signal.h>
-#include "lua.h"
-
 #include "lmakelib.h"
 
 static lua_State *globalL = NULL;
 
-static const char *progname = "make";
+static const char *progname = "presto";
 #define LUA_PROMPT		"> "
 #define LUA_PROMPT2		">> "
 #define LUA_MAXINPUT	512
@@ -43,23 +46,20 @@ static void laction (int i) {
 
 static void print_usage (void) {
   fprintf(stderr,
-  "usage: %s [options] [script [args]].\n"
+  "usage: presto [options] [script [args]].\n"
   "Available options are:\n"
   "  -e stat  execute string " LUA_QL("stat") "\n"
   "  -l name  require library " LUA_QL("name") "\n"
   "  -i       enter interactive mode after executing " LUA_QL("script") "\n"
   "  -v       show version information\n"
   "  --       stop handling options\n"
-  "  -        execute stdin and stop handling options\n"
-  ,
-  progname);
+  "  -        execute stdin and stop handling options\n");
   fflush(stderr);
 }
 
 
-static void l_message (const char *pname, const char *msg) {
-  if (pname) fprintf(stderr, "%s: ", pname);
-  fprintf(stderr, "%s\n", msg);
+static void l_message (const char *msg) {
+  fprintf(stderr, "presto: %s\n", msg);
   fflush(stderr);
 }
 
@@ -68,7 +68,7 @@ static int report (lua_State *L, int status) {
   if (status && !lua_isnil(L, -1)) {
     const char *msg = lua_tostring(L, -1);
     if (msg == NULL) msg = "(error object is not a string)";
-    l_message(progname, msg);
+    l_message(msg);
     lua_pop(L, 1);
   }
   return status;
@@ -111,8 +111,9 @@ static int docall (lua_State *L, int narg, int clear) {
 
 
 static void print_version (void) {
-  l_message(NULL, "Presto Build 0.1 (new-wolf-moon), Copyright (C) 2009, Ian Prest\n"
-									"Based on " LUA_RELEASE ", " LUA_COPYRIGHT);
+	fprintf(stderr, "Presto Build 0.1 (new-wolf-moon), Copyright (C) 2009, Ian Prest\n"
+									LUA_RELEASE ", " LUA_COPYRIGHT "\n");
+  fflush(stderr);
 }
 
 
@@ -227,9 +228,7 @@ static void dotty (lua_State *L) {
       lua_getglobal(L, "print");
       lua_insert(L, 1);
       if (lua_pcall(L, lua_gettop(L)-1, 0, 0) != 0)
-        l_message(progname, lua_pushfstring(L,
-                               "error calling " LUA_QL("print") " (%s)",
-                               lua_tostring(L, -1)));
+        l_message(lua_pushfstring(L, "error calling " LUA_QL("print") " (%s)", lua_tostring(L, -1)));
     }
   }
   lua_settop(L, 0);  /* clear stack */
@@ -346,7 +345,6 @@ static int pmain (lua_State *L) {
   int script;
   int has_i = 0, has_v = 0, has_e = 0;
   globalL = L;
-  if (argv[0] && argv[0][0]) progname = argv[0];
   lua_gc(L, LUA_GCSTOP, 0);  /* stop collector during initialization */
   luaL_openlibs(L);  /* open libraries */
 	luaopen_make(L); /* open custom "make" library */
@@ -389,12 +387,20 @@ static int pmain (lua_State *L) {
 }
 
 
+
+/*SDOC***********************************************************************
+
+	Name:		main
+
+	Action:	Main entry point for the application
+
+***********************************************************************EDOC*/
 int main (int argc, char **argv) {
   int status;
   struct Smain s;
-  lua_State *L = lua_open();  /* create state */
+  lua_State *L = lua_open();	// create lua state
   if (L == NULL) {
-    l_message(argv[0], "cannot create state: not enough memory");
+    l_message("cannot create state: not enough memory");
     return EXIT_FAILURE;
   }
   s.argc = argc;
