@@ -16,4 +16,6 @@
 #define LUA_MAKELIBNAME	"make"
 LUALIB_API int (luaopen_make) (lua_State *L);
 
+extern int make_dir_cd(lua_State *L);
+
 #endif // lmakelib_h

@@ -342,9 +342,9 @@ end
 	Action:	the main loop; iterates over all the goals and updates them,
 					dispatching running jobs as necessary
 -------------------------------------------------------------------------]]--
+make.goals = make.util.target_list:new{}
 function make.update_goals()
-	if not make.goals then
-		make.goals = make.util.target_list:new{}
+	if not next(make.goals) then
 		if __target.__default == nil then error("*** No targets.  Stop.",2); end
 		make.goals[target.__default.name] = true
 	end

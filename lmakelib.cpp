@@ -893,7 +893,7 @@ static int make_dir_temp(lua_State *L) {
 	Returns:	[1] string - current working directory
 
 ***********************************************************************EDOC*/
-static int make_dir_cd(lua_State *L) {
+int make_dir_cd(lua_State *L) {
 	if(lua_gettop(L)) {// optional directory
 		lua_path_init();
 		size_t l; char* path_in = lua_getpath(L, 1, &l);
