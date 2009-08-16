@@ -52,8 +52,8 @@ static void print_usage(void) {
 	"  -j [N]                      Allow N jobs at once.\n"
 	"  -k                          Keep going when some targets can't be made.\n"
 	"  -l LIBRARY                  require lua library LIBRARY\n"
+	"  -n                          Noisy; echo commands as they run.\n"
 	"  -q                          Run no commands; exit status says if up to date.\n"
-	"  -s                          Don't echo commands.\n"
 	"  -v                          Print the version number of make and exit.\n");
 	fflush(stderr);
 }
@@ -266,7 +266,7 @@ static int pmain(lua_State* L) {
 					case 'd': set_flag(L, "debug", 1); break;
 					case 'k': set_flag(L, "keep_going", 1); break;
 					case 'q': set_flag(L, "question", 1); break;
-					case 's': set_flag(L, "silent", 1); break;
+					case 'n': set_flag(L, "noisy", 1); break;
 					case 'v': print_version(); s->status = 1; return 0;
 					case 'C': get_arg();	// change directory
 						lua_pushstring(L, arg);

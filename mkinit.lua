@@ -52,15 +52,6 @@ end
 
 
 
-
-
-
-
-
-
-
-
-
 -- the "__target" table is the backing-store for "target"
 local __target = {}
 local __is_target = {}
@@ -134,7 +125,7 @@ function __target:bring_up_to_date()
 	if not(self.deps_newer) then self.deps_newer = make.util.target_list:new{}; end
 
 	-- we must build if we don't exist yet
-	local must_build = not(self:exists())
+	local must_build = make.flags.always_make or not(self:exists())
 	local must_wait = false
 
 	-- loop over all dependencies
@@ -173,6 +164,11 @@ function __target:bring_up_to_date()
 
 	-- do we need to build?
 	if must_build then
+		if make.flags.question and self.command ~= phony_target.command then
+			print("presto: *** must remake target '" .. self.name .. "'")
+			os.exit(1)
+		end
+
 		if self.command then
 			-- run the update command
 			if make.jobs:start(self.command, self) then
@@ -181,7 +177,7 @@ function __target:bring_up_to_date()
 				self.status = make.status.updated
 			end
 			return self.status
-		else
+		elseif not(make.flags.always_make) or not(self:exists()) then
 			-- don't know how to build; error
 			error("no rule to make target '".. self.name .."'")
 			return make.status.error
@@ -315,8 +311,10 @@ end
 -------------------------------------------------------------------------]]--
 make.run = function(command, env, printfn)
 	-- spawn a new process
+	printfn = printfn or print
+	if make.flags.noisy then printfn(command); end
 	local proc = make.proc.spawn(command, env)
-	proc.print = printfn or print
+	proc.print = printfn
 	-- pipe all output until the process exits
 	while make.proc.exit_code(proc) == nil do
 		coroutine.yield(proc)
@@ -364,14 +362,14 @@ function make.update_goals()
 			if goal_status ~= make.status.running then
 				if goal_status == make.status.error then
 					-- goal finished with an error
-					print("error updating target '".. goal_name .."'")
+					print("presto: *** error updating target '".. goal_name .."'.  Stop.")
 					os.exit(1)
 				elseif goal_status == make.status.none then
 					-- goal was already up to date
-					print("nothing to be done for '".. goal_name .."'")
+					print("presto: *** nothing to be done for '".. goal_name .."'.")
 				else -- goal_status == make.status.updated
 					-- goal updated successfully
-					print("target '".. goal_name .."' is up to date")
+					print("presto: *** target '".. goal_name .."' is up to date")
 				end
 
 				-- done with this target; remove it from the list
