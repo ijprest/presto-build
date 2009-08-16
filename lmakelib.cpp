@@ -234,7 +234,7 @@ static int make_path_remove_slash(lua_State *L) {
 
 /*SDOC***********************************************************************
 
-	Name:			make_path_remove_extension
+	Name:			make_path_remove_ext
 
 	Action:		Removes the extension from a filename.
 
@@ -243,7 +243,7 @@ static int make_path_remove_slash(lua_State *L) {
 	Returns:	[1] string - output pathname (e.g. "foo")
 
 ***********************************************************************EDOC*/
-static int make_path_remove_extension(lua_State *L) {
+static int make_path_remove_ext(lua_State *L) {
 	lua_path_init();
   size_t l; char* path_in = lua_getpath(L, 1, &l);
 	char path_out[MAX_PATH] = {};
@@ -290,7 +290,7 @@ static int make_path_unquote(lua_State *L) {
 
 /*SDOC***********************************************************************
 
-	Name:			make_path_get_extension
+	Name:			make_path_get_ext
 
 	Action:		Returns only the extension of the file.
 
@@ -299,7 +299,7 @@ static int make_path_unquote(lua_State *L) {
 	Returns:	[1] string - output pathname (e.g., ".cpp")
 
 ***********************************************************************EDOC*/
-static int make_path_get_extension(lua_State *L) {
+static int make_path_get_ext(lua_State *L) {
 	lua_path_init();
   size_t l; char* path_in = lua_getpath(L, 1, &l);
 	const char* path_out = PathFindExtensionA(path_in);
@@ -372,7 +372,7 @@ static int make_path_is_relative(lua_State *L) {
 
 /*SDOC***********************************************************************
 
-	Name:			make_path_add_extension
+	Name:			make_path_add_ext
 
 	Action:		Adds an extension to the given path/filename.
 
@@ -382,7 +382,7 @@ static int make_path_is_relative(lua_State *L) {
 	Returns:	[1] string - output pathname (e.g. "foo.cpp")
 
 ***********************************************************************EDOC*/
-static int make_path_add_extension(lua_State *L) {
+static int make_path_add_ext(lua_State *L) {
 	lua_path_init();
   size_t l1; char* path1 = lua_getpath(L, 1, &l1);
   size_t l2; char* path2 = lua_getpath(L, 2, &l2);
@@ -396,7 +396,7 @@ static int make_path_add_extension(lua_State *L) {
 
 /*SDOC***********************************************************************
 
-	Name:			make_path_change_extension
+	Name:			make_path_change_ext
 
 	Action:		Adds an extension to the given path/filename.
 
@@ -406,7 +406,7 @@ static int make_path_add_extension(lua_State *L) {
 	Returns:	[1] string - output pathname (e.g. "foo.cpp")
 
 ***********************************************************************EDOC*/
-static int make_path_change_extension(lua_State *L) {
+static int make_path_change_ext(lua_State *L) {
 	lua_path_init();
   size_t l1; char* path1 = lua_getpath(L, 1, &l1);
   size_t l2; char* path2 = lua_getpath(L, 2, &l2);
@@ -562,10 +562,10 @@ static const luaL_Reg make_pathlib[] = {
 	{"is_relative", make_path_is_relative},			// make.path.is_relative
 	{"quote",make_path_quote},									// make.path.quote
 	{"unquote",make_path_unquote},							// make.path.unquote
-	{"add_ext",make_path_add_extension},				// make.path.add_ext
-	{"get_ext",make_path_get_extension},				// make.path.get_ext
-	{"change_ext",make_path_change_extension},	// make.path.change_ext
-	{"remove_ext",make_path_remove_extension},	// make.path.remove_ext
+	{"add_ext",make_path_add_ext},							// make.path.add_ext
+	{"get_ext",make_path_get_ext},							// make.path.get_ext
+	{"change_ext",make_path_change_ext},				// make.path.change_ext
+	{"remove_ext",make_path_remove_ext},				// make.path.remove_ext
 	{"get_name",make_path_get_name},						// make.path.get_name
 	{"get_dir",make_path_get_dir},							// make.path.get_dir
 	{"combine",make_path_combine},							// make.path.combine
@@ -607,7 +607,7 @@ static int make_file_exists(lua_State *L) {
 
 /*SDOC***********************************************************************
 
-	Name:			make_file_tempfile
+	Name:			make_file_temp
 
 	Action:		Returns the name of a unique temporary file.
 
@@ -617,7 +617,7 @@ static int make_file_exists(lua_State *L) {
 						should ensure it gets deleted.
 
 ***********************************************************************EDOC*/
-static int make_file_tempfile(lua_State *L) {
+static int make_file_temp(lua_State *L) {
 	char dir[MAX_PATH] = {};
 	GetTempPathA(MAX_PATH, dir);
 	char path_out[MAX_PATH] = {};
@@ -645,7 +645,7 @@ static int make_file_touch(lua_State *L) {
 	HANDLE hFile = CreateFileA(path_in, FILE_WRITE_ATTRIBUTES, 0, NULL, 
 		OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if( hFile == INVALID_HANDLE_VALUE)
-		luaL_error(L, "error touching file '%s'", path_in);
+		luaL_error(L, "error touching file " LUA_QS, path_in);
 	SYSTEMTIME st = {};
 	FILETIME ft = {};
 	GetSystemTime(&st);
@@ -671,7 +671,7 @@ static int make_file_copy(lua_State *L) {
   size_t l1; char* path1 = lua_getpath(L, 1, &l1);
   size_t l2; char* path2 = lua_getpath(L, 2, &l2);
 	if(!CopyFileA(path1, path2, FALSE))
-		luaL_error(L, "error copying file '%s' to '%s'", path1, path2);
+		luaL_error(L, "error copying file " LUA_QS " to " LUA_QS, path1, path2);
 	return 0;
 }
 
@@ -691,14 +691,14 @@ static int make_file_delete(lua_State *L) {
 	lua_path_init();
   size_t l; char* path_in = lua_getpath(L, 1, &l);
 	if(!DeleteFileA(path_in) && GetLastError() != ERROR_FILE_NOT_FOUND)
-		luaL_error(L, "error deleting file '%s'", path_in);
+		luaL_error(L, "error deleting file " LUA_QS, path_in);
 	return 0;
 }
 
 
 /*SDOC***********************************************************************
 
-	Name:			make_file_getsize
+	Name:			make_file_size
 
 	Action:		Returns the size of a file
 
@@ -708,7 +708,7 @@ static int make_file_delete(lua_State *L) {
 						 or: nil - if the file doesn't exist
 
 ***********************************************************************EDOC*/
-static int make_file_getsize(lua_State *L) {
+static int make_file_size(lua_State *L) {
 	lua_path_init();
   size_t l; char* path_in = lua_getpath(L, 1, &l);
 	HANDLE hFile = CreateFileA(path_in, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, 
@@ -788,7 +788,7 @@ static int make_file_md5(lua_State *L) {
 	HANDLE hFile = CreateFileA(path_in, GENERIC_READ, FILE_SHARE_READ, NULL, 
 		OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if( hFile == INVALID_HANDLE_VALUE)
-		luaL_error(L, "error opening file '%s' for reading", path_in);
+		luaL_error(L, "error opening file "LUA_QS" for reading", path_in);
 	MD5_CTX md5;
 	MD5Init(&md5);
 
@@ -809,11 +809,11 @@ static int make_file_md5(lua_State *L) {
 
 static const luaL_Reg make_filelib[] = {
 	{"exists", make_file_exists},								// make.file.exists
-	{"temp",make_file_tempfile},								// make.file.temp
+	{"temp",make_file_temp},										// make.file.temp
 	{"copy",make_file_copy},										// make.file.copy
 	{"touch",make_file_touch},									// make.file.touch
 	{"delete",make_file_delete},								// make.file.delete
-	{"size",make_file_getsize},									// make.file.size
+	{"size",make_file_size},										// make.file.size
 	{"time",make_file_time},										// make.file.time
 	{"md5",make_file_md5},											// make.file.md5
   {NULL, NULL}
@@ -866,14 +866,14 @@ static int make_dir_is_empty(lua_State *L) {
 
 /*SDOC***********************************************************************
 
-	Name:			make_dir_tempdir
+	Name:			make_dir_temp
 
 	Action:		Returns the user-defined temporary directory (typically %TEMP%)
 
 	Returns:	[1] string - tempdir
 
 ***********************************************************************EDOC*/
-static int make_dir_tempdir(lua_State *L) {
+static int make_dir_temp(lua_State *L) {
 	char path_out[MAX_PATH] = {};
 	GetTempPathA(MAX_PATH, path_out);
 	lua_pushpath(L, path_out);
@@ -919,7 +919,7 @@ static int make_dir_md(lua_State *L) {
 	lua_path_init();
 	size_t l; char* path_in = lua_getpath(L, 1, &l);
 	if(!CreateDirectoryA(path_in, NULL))
-		luaL_error(L, "error creating directory '%s'", path_in);
+		luaL_error(L, "error creating directory " LUA_QS, path_in);
 	return 0;
 }
 
@@ -939,14 +939,14 @@ static int make_dir_rd(lua_State *L) {
 	lua_path_init();
 	size_t l; char* path_in = lua_getpath(L, 1, &l);
 	if(!RemoveDirectoryA(path_in))
-		luaL_error(L, "error removing directory '%s'", path_in);
+		luaL_error(L, "error removing directory " LUA_QS, path_in);
 	return 0;
 }
 
 static const luaL_Reg make_dirlib[] = {
 	{"is_dir", make_dir_is_dir},								// make.dir.is_dir
 	{"is_empty", make_dir_is_empty},						// make.dir.is_empty
-	{"temp",make_dir_tempdir},									// make.dir.temp
+	{"temp",make_dir_temp},											// make.dir.temp
 	{"cd",make_dir_cd},													// make.dir.cd
 	{"md",make_dir_md},													// make.dir.md
 	{"rd",make_dir_rd},													// make.dir.rd
@@ -1087,7 +1087,7 @@ static int make_proc_exitcode(lua_State *L) {
 	luaL_checktype(L, 1, LUA_TTABLE);
 	lua_getfield(L, 1, "data");
 	process* p = (process*)lua_touserdata(L,-1);
-	luaL_argcheck(L, p != NULL && lua_objlen(L,-1) == sizeof(process), 1, "'process' expected");
+	luaL_argcheck(L, p != NULL && lua_objlen(L,-1) == sizeof(process), 1, LUA_QL("process") " expected");
 	if(p->hProcess != INVALID_HANDLE_VALUE)
 		lua_pushnil(L);
 	else
@@ -1152,7 +1152,7 @@ static int make_proc_flushio(lua_State *L) {
 	luaL_checktype(L, 1, LUA_TTABLE);
 	lua_getfield(L, 1, "data");
 	process* p = (process*)lua_touserdata(L,-1);
-	luaL_argcheck(L, p != NULL && lua_objlen(L,-1) == sizeof(process), 1, "'process' expected");
+	luaL_argcheck(L, p != NULL && lua_objlen(L,-1) == sizeof(process), 1, LUA_QL("process") " expected");
 	if(p->hProcess == INVALID_HANDLE_VALUE)
 		return 0; // process is already done!
 
@@ -1241,7 +1241,7 @@ static int make_proc_wait(lua_State *L) {
 		lua_getfield(L, -1, "data");
 		process* p = (process*)lua_touserdata(L,-1);
 		if(p == NULL || lua_objlen(L,-1) != sizeof(process))
-			luaL_error(L, "'process' expected");
+			luaL_error(L, LUA_QL("process") " expected");
 
 		handles.push_back(p->hProcess);
 		if(p->olp.hEvent != INVALID_HANDLE_VALUE)

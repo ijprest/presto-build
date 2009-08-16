@@ -20,8 +20,8 @@ static const char *progname = "presto";
 #define LUA_MAXINPUT	512
 
 #define lua_readline(L,b,p)	\
-	((void)L, fputs(p, stdout), fflush(stdout),  /* show prompt */ \
-	fgets(b, LUA_MAXINPUT, stdin) != NULL)  /* get line */
+	((void)L, fputs(p, stdout), fflush(stdout),		/* show prompt */ \
+	fgets(b, LUA_MAXINPUT, stdin) != NULL)				/* get line */
 #define lua_saveline(L,idx)	{ (void)L; (void)idx; }
 #define lua_freeline(L,b)	{ (void)L; (void)b; }
 
@@ -29,17 +29,14 @@ static const char *progname = "presto";
 #include <stdio.h>
 #define lua_stdin_is_tty()	_isatty(_fileno(stdin))
 
-
-static void lstop (lua_State *L, lua_Debug *ar) {
-  (void)ar;  /* unused arg. */
+static void lstop (lua_State *L, lua_Debug* /*ar*/) {
   lua_sethook(L, NULL, 0, 0);
   luaL_error(L, "interrupted!");
 }
 
-
 static void laction (int i) {
-  signal(i, SIG_DFL); /* if another SIGINT happens before lstop,
-                              terminate process (default action) */
+	// if another SIGINT happens before lstop, terminate process (default action)
+  signal(i, SIG_DFL); 
   lua_sethook(globalL, lstop, LUA_MASKCALL | LUA_MASKRET | LUA_MASKCOUNT, 1);
 }
 

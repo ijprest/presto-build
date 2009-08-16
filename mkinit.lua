@@ -345,6 +345,7 @@ end
 function make.update_goals()
 	if not make.goals then
 		make.goals = make.util.target_list:new{}
+		if __target.__default == nil then error("*** No targets.  Stop.",2); end
 		make.goals[target.__default.name] = true
 	end
 
