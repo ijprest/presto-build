@@ -15,16 +15,24 @@
 // Global Lua state; used by the signal handlers
 static lua_State* g_L = NULL;
 
-static void lstop(lua_State* L, lua_Debug* /*ar*/) {
-	lua_sethook(L, NULL, 0, 0);
-	luaL_error(L, "interrupted!");
-}
-static void laction(int i) {
-	// if another SIGINT happens before lstop, terminate process (default action)
-	signal(i, SIG_DFL); 
-	lua_sethook(g_L, lstop, LUA_MASKCALL | LUA_MASKRET | LUA_MASKCOUNT, 1);
-}
+// Smain structure - used to pass arguments & status between the protected
+// pmain() and unprotected main().
+struct Smain {
+	int argc;
+	char** argv;
+	int status;
+};
 
+
+/*SDOC***********************************************************************
+
+	Name:			print_version
+						print_usage
+						l_message
+
+	Action:		Helper functions to print common error strings.
+
+***********************************************************************EDOC*/
 static void print_version(void) {
 	fprintf(stderr, "Presto Build 0.1 (new-wolf-moon), Copyright (C) 2009 Ian Prest\n"
 									LUA_RELEASE ", " LUA_COPYRIGHT "\n");
@@ -41,7 +49,7 @@ static void print_usage(void) {
 	"  -e STAT                     execute string STAT as lua code\n"
 	"  -f FILE                     Read FILE as a makefile.\n"
 	"  -h                          Print this message and exit.\n"
-	"  -j [N]                      Allow N jobs at once; infinite jobs with no arg.\n"
+	"  -j [N]                      Allow N jobs at once.\n"
 	"  -k                          Keep going when some targets can't be made.\n"
 	"  -l LIBRARY                  require lua library LIBRARY\n"
 	"  -q                          Run no commands; exit status says if up to date.\n"
@@ -56,6 +64,13 @@ static void l_message(const char* msg) {
 }
 
 
+/*SDOC***********************************************************************
+
+	Name:			report
+
+	Action:		Report a lua error
+
+***********************************************************************EDOC*/
 static int report(lua_State* L, int status) {
 	if(status && !lua_isnil(L, -1)) {
 		const char* msg = lua_tostring(L, -1);
@@ -67,6 +82,32 @@ static int report(lua_State* L, int status) {
 }
 
 
+/*SDOC***********************************************************************
+
+	Name:			lstop
+						laction
+
+	Action:		Signal handlers when Lua code is running
+
+***********************************************************************EDOC*/
+static void lstop(lua_State* L, lua_Debug* /*ar*/) {
+	lua_sethook(L, NULL, 0, 0);
+	luaL_error(L, "interrupted!");
+}
+static void laction(int i) {
+	// if another SIGINT happens before lstop, terminate process (default action)
+	signal(i, SIG_DFL); 
+	lua_sethook(g_L, lstop, LUA_MASKCALL | LUA_MASKRET | LUA_MASKCOUNT, 1);
+}
+
+
+/*SDOC***********************************************************************
+
+	Name:			traceback
+
+	Action:		Report stack traces when there is a lua error
+
+***********************************************************************EDOC*/
 static int traceback(lua_State* L) {
 	if(!lua_isstring(L, 1))		// 'message' not a string?
 		return 1;								// keep it intact
@@ -87,6 +128,13 @@ static int traceback(lua_State* L) {
 }
 
 
+/*SDOC***********************************************************************
+
+	Name:			docall
+
+	Action:		Call a chunk of Lua code
+
+***********************************************************************EDOC*/
 static int docall(lua_State* L, int narg, int clear) {
 	int status;
 	int base = lua_gettop(L) - narg;  // function index
@@ -101,17 +149,25 @@ static int docall(lua_State* L, int narg, int clear) {
 	return status;
 }
 
+
+/*SDOC***********************************************************************
+
+	Name:			dofile
+						dostring
+						dolibrary
+
+	Action:		Execute a string or file, or require a Lua library.
+
+***********************************************************************EDOC*/
 static int dofile(lua_State* L, const char* name) {
 	int status = luaL_loadfile(L, name) || docall(L, 0, 1);
 	return report(L, status);
 }
 
-
 static int dostring(lua_State* L, const char* s, const char* name) {
 	int status = luaL_loadbuffer(L, s, strlen(s), name) || docall(L, 0, 1);
 	return report(L, status);
 }
-
 
 static int dolibrary(lua_State* L, const char* name) {
 	lua_getglobal(L, "require");
@@ -119,26 +175,18 @@ static int dolibrary(lua_State* L, const char* name) {
 	return report(L, docall(L, 1, 1));
 }
 
-static int handle_luainit(lua_State* L) {
-	const char* init = getenv("PRESTO_INIT");
-	if(init == NULL) return 0;  // status OK
-	else if(init[0] == '@')
-		return dofile(L, init+1);
-	else
-		return dostring(L, init, "=PRESTO_INIT");
-}
 
+/*SDOC***********************************************************************
 
-// Smain structure - 
-struct Smain {
-	int argc;
-	char** argv;
-	int status;
-};
+	Name:			set_flag
+						set_max_jobs
 
+	Action:		Helpers used by the command-line parsing code to set a lua
+						flag.
 
+***********************************************************************EDOC*/
 static int set_flag(lua_State* L, const char* name, int value) {
-	lua_getglobal(L, "make");
+	lua_getglobal(L, LUA_MAKELIBNAME);
 	lua_getfield(L, -1, "flags");
 	luaL_checktype(L, -1, LUA_TTABLE);
 	lua_pushstring(L, name);
@@ -149,7 +197,8 @@ static int set_flag(lua_State* L, const char* name, int value) {
 }
 
 static int set_max_jobs(lua_State* L, int max_jobs) {
-	lua_getglobal(L, "make");
+	if(!max_jobs) max_jobs = 1024; // some ridiculous number
+	lua_getglobal(L, LUA_MAKELIBNAME);
 	lua_getfield(L, -1, "jobs");
 	luaL_checktype(L, -1, LUA_TTABLE);
 	lua_pushstring(L, "slots");
@@ -158,6 +207,7 @@ static int set_max_jobs(lua_State* L, int max_jobs) {
 	lua_pop(L, 2); // pop "make" and "jobs"
 	return 0;
 }
+
 
 /*SDOC***********************************************************************
 
@@ -168,6 +218,9 @@ static int set_max_jobs(lua_State* L, int max_jobs) {
 	Params:		[1] Smain* - light user data, contains program arguments
 
 ***********************************************************************EDOC*/
+#define bad_usage() (print_usage(), (s->status = 1), 0)
+#define handle_status(exp) {if((s->status = (exp)) != 0) return 0;}
+#define get_arg() {if(!*(sw+1) && s->argv[i+1]) {arg = s->argv[i+1];i++;} else if(*(sw+1)) {arg = sw+1;sw = NULL;} else {return bad_usage();}}
 static int pmain(lua_State* L) {
 	struct Smain* s = (struct Smain*)lua_touserdata(L, 1);
 	g_L = L;
@@ -180,7 +233,12 @@ static int pmain(lua_State* L) {
 	lua_gc(L, LUA_GCRESTART, 0);	// restart the garbage collector
 
 	// Handle any intialization code in the PRESTO_INIT environment variable
-	s->status = handle_luainit(L);
+	const char* init = getenv("PRESTO_INIT");
+	if(init && init[0] == '@') {
+		handle_status(dofile(L, init+1));
+	} else if(init) {
+		handle_status(dostring(L, init, "=PRESTO_INIT"));
+	}
 
 	// Parse the arguments
 	bool parsing_switches = true;
@@ -196,69 +254,41 @@ static int pmain(lua_State* L) {
 						continue;
 					} else {
 						// we don't currently support GNU-style long switch names
-						print_usage();
-						s->status = 1;
-						return 0;
+						return bad_usage();
 					}
 				}
 
 				// Normal switch(es)
-				for(char* sw = &s->argv[i][1]; sw && *sw; sw++) {
+				char* arg = 0;
+				for(char* sw = &s->argv[i][1]; sw && *sw; sw ? sw++ : 0) {
 					switch(*sw) {
-					case 'B':
-						set_flag(L, "always_make", 1); break;
-					case 'd':
-						set_flag(L, "debug", 1); break;
-					case 'k':
-						set_flag(L, "keep_going", 1); break;
-					case 'q':
-						set_flag(L, "question", 1); break;
-					case 's':
-						set_flag(L, "silent", 1); break;
-					case 'h':
-						print_usage(); s->status = 1; return 0;
-					case 'v':
-						print_version(); s->status = 1; return 0;
-					case 'C': // change directory
-						if(*(sw+1)) { print_usage(); s->status = 1; return 0; }
-						lua_pushstring(L, s->argv[i+1]);
+					case 'B': set_flag(L, "always_make", 1); break;
+					case 'd': set_flag(L, "debug", 1); break;
+					case 'k': set_flag(L, "keep_going", 1); break;
+					case 'q': set_flag(L, "question", 1); break;
+					case 's': set_flag(L, "silent", 1); break;
+					case 'v': print_version(); s->status = 1; return 0;
+					case 'C': get_arg();	// change directory
+						lua_pushstring(L, arg);
 						make_dir_cd(L);
 						lua_pop(L,2);
-						i++; // skip the next paramter
 						break;
-					case 'e': // execute lua statement
-						if(*(sw+1)) { print_usage(); s->status = 1; return 0; }
-						s->status = dostring(L, s->argv[i+1], "=(command line)");
-						if(s->status != 0) return 0;
-						i++;
+					case 'e': get_arg();	// execute lua statement
+						handle_status(dostring(L, arg, "=(command line)"));
 						break;
-					case 'f': // execute file
-						if(*(sw+1)) { print_usage(); s->status = 1; return 0; }
-						s->status = dofile(L, s->argv[i+1]);
-						if(s->status != 0) return 0;
-						i++;
+					case 'f': get_arg();	// execute file
+						handle_status(dofile(L, arg));
 						loaded_file = true;
 						break;
-					case 'l': // require library
-						if(*(sw+1)) { print_usage(); s->status = 1; return 0; }
-						s->status = dolibrary(L, s->argv[i+1]);
-						if(s->status != 0) return 0;
-						i++;
+					case 'l': get_arg();	// require library
+						handle_status(dolibrary(L, arg));
 						break;
-					case 'j':	// max_jobs
-						if(!*(sw+1)) { 
-							set_max_jobs(L, atoi(s->argv[i+1]));
-						} if(isdigit(*(sw+1))) {
-							set_max_jobs(L, atoi(sw+1));
-						} else {
-							print_usage(); s->status = 1; return 0;
-						}
-						i++;
+					case 'j':	get_arg();	// max_jobs
+						set_max_jobs(L, atoi(arg));
 						break;
+					case 'h':
 					default:	// unrecognized switch
-						print_usage(); 
-						s->status = 1; 
-						return 0;
+						return bad_usage();
 					}
 				}
 				continue;
@@ -269,7 +299,7 @@ static int pmain(lua_State* L) {
 		if(strchr(s->argv[i],'=')) {
 			// parameter is a variable assignment; we override the 
 			// environment in make.env
-			lua_getglobal(L, "make");
+			lua_getglobal(L, LUA_MAKELIBNAME);
 			lua_getfield(L, -1, "env");
 			luaL_checktype(L, -1, LUA_TTABLE);
 
@@ -292,7 +322,7 @@ static int pmain(lua_State* L) {
 			lua_pop(L, 2); // "make", "env"
 		} else {
 			// parameter is a goal
-			lua_getglobal(L, "make");
+			lua_getglobal(L, LUA_MAKELIBNAME);
 			lua_getfield(L, -1, "goals");
 			luaL_checktype(L, -1, LUA_TTABLE);
 			lua_pushstring(L, s->argv[i]);
@@ -307,25 +337,25 @@ static int pmain(lua_State* L) {
 	if(!loaded_file) {
 		// try makefile.lua
 		if(PathFileExistsA("makefile.lua")) {
-			s->status = dofile(L, "makefile.lua");
+			handle_status(dofile(L, "makefile.lua"));
 		} else if(PathFileExistsA("makefile")) {
-			s->status = dofile(L, "makefile");
+			handle_status(dofile(L, "makefile"));
 		} else {
 			luaL_error(L, "*** No targets specified and no makefile found.  Stop.");
-		}
-		if(s->status != 0) return 0;
+		}		
 	}
 			
 	// call: make.update_goals()
-	lua_getglobal(L, "make");
+	lua_getglobal(L, LUA_MAKELIBNAME);
 	lua_getfield(L,-1,"update_goals");
 	lua_remove(L,-2); // remove "make"
 	luaL_checktype(L, -1, LUA_TFUNCTION);
-	s->status = docall(L,0,1);
-
+	handle_status(docall(L,0,1));
 	return 0;
 }
-
+#undef bad_usage
+#undef handle_status
+#undef get_arg
 
 /*SDOC***********************************************************************
 

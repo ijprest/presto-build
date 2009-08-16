@@ -1373,6 +1373,12 @@ LUALIB_API int luaopen_make(lua_State *L) {
 		}
 	}
 	lua_settable(L, -3); // make.env
+
+	// Set up make.flags (empty table, all flags default false)
+	lua_newtable(L);
+	lua_setfield(L, -2, "flags");
+
+	// Register the "make" table
 	lua_setfield(L, LUA_GLOBALSINDEX, LUA_MAKELIBNAME);
 
 	// Register all the make.* functions
