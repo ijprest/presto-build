@@ -156,6 +156,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\lcoco.h"
+				>
+			</File>
+			<File
 				RelativePath=".\lcode.h"
 				>
 			</File>
@@ -297,6 +301,18 @@
 				</FileConfiguration>
 				<FileConfiguration
 					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						CompileAs="2"
+					/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\lcoco.c"
+				>
+				<FileConfiguration
+					Name="Debug|Win32"
 					>
 					<Tool
 						Name="VCCLCompilerTool"
