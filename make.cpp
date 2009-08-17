@@ -46,14 +46,15 @@ static void print_usage(void) {
 	"  -B                          Unconditionally make all targets.\n"
 	"  -C DIRECTORY                Change to DIRECTORY before doing anything.\n"
 	"  -d                          Print lots of debugging information.\n"
-	"  -e STAT                     execute string STAT as lua code\n"
+	"  -e STAT                     Execute string STAT as lua code\n"
 	"  -f FILE                     Read FILE as a makefile.\n"
 	"  -h                          Print this message and exit.\n"
 	"  -j [N]                      Allow N jobs at once.\n"
 	"  -k                          Keep going when some targets can't be made.\n"
-	"  -l LIBRARY                  require lua library LIBRARY\n"
+	"  -l LIBRARY                  Require lua library LIBRARY\n"
 	"  -n                          Noisy; echo commands as they run.\n"
 	"  -q                          Run no commands; exit status says if up to date.\n"
+	"  -Q                          Just run the lua code and exit.\n"
 	"  -v                          Print the version number of make and exit.\n");
 	fflush(stderr);
 }
@@ -243,6 +244,7 @@ static int pmain(lua_State* L) {
 	// Parse the arguments
 	bool parsing_switches = true;
 	bool loaded_file = false;
+	bool quit = false;
 	for(int i = 1; s->argv[i] != NULL; i++) {
 		if(parsing_switches) {
 			if(s->argv[i][0] == '-') {
@@ -265,8 +267,9 @@ static int pmain(lua_State* L) {
 					case 'B': set_flag(L, "always_make", 1); break;
 					case 'd': set_flag(L, "debug", 1); break;
 					case 'k': set_flag(L, "keep_going", 1); break;
-					case 'q': set_flag(L, "question", 1); break;
 					case 'n': set_flag(L, "noisy", 1); break;
+					case 'q': set_flag(L, "question", 1); break;
+					case 'Q': quit = true; break;
 					case 'v': print_version(); s->status = 1; return 0;
 					case 'C': get_arg();	// change directory
 						lua_pushstring(L, arg);
@@ -331,6 +334,10 @@ static int pmain(lua_State* L) {
 			lua_pop(L, 2); // "make", "goals"
 		}
 	}
+
+	// If asked, we exit out without trying to build any goals.
+	// This is useful if the user just wants to run his Lua code.
+	if(quit) return 0;	
 
 	// If we didn't load any files, try to load makefile.lua 
 	// in the current directory.
