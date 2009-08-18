@@ -119,7 +119,8 @@ end
 -------------------------------------------------------------------------]]--
 function __target:bring_up_to_date()
 	if self.status == make.status.updated or -- already done!
-		 self.status == make.status.running then -- still running
+		 self.status == make.status.running or -- still running!
+		 self.status == make.status.error then -- failed!
 		return self.status
 	end
 	if not(self.deps_newer) then self.deps_newer = make.util.target_list:new{}; end
@@ -146,7 +147,10 @@ function __target:bring_up_to_date()
 			end
 		elseif dep_status == make.status.error then
 			-- ummm...
-			error("error updating target '".. dep.name .."'")
+			print("presto: *** error updating target '".. dep.name .."':")
+			if dep.errmsg then print("presto: *** "..dep.errmsg) end
+			self.status = make.status.error
+			return self.status
 		elseif dep_status == make.status.running then
 			-- dependency is being built
 			must_wait = true
@@ -171,16 +175,11 @@ function __target:bring_up_to_date()
 
 		if self.command then
 			-- run the update command
-			if make.jobs:start(self.command, self) then
-				self.status = make.status.running
-			else
-				self.status = make.status.updated
-			end
-			return self.status
+			return make.jobs.start(self)
 		elseif not(make.flags.always_make) or not(self:exists()) then
 			-- don't know how to build; error
+			self.status = make.status.error
 			error("no rule to make target '".. self.name .."'")
-			return make.status.error
 		end
 	end
 
@@ -247,20 +246,22 @@ make.jobs.dispatch = function(self)
 		--print("make.jobs.dispatch: dispatching jobs")
 		local shouldwait = true
 		local waiting = {}
-		local job_count = self.count
+		local job_count = make.jobs.count
 		-- iterate over all the jobs
-		for jobid,job in pairs(self.running) do
+		for jobid,job in pairs(make.jobs.running) do
 			-- restart the thread and let it do some work
 			make.jobs.current = job
 			local ok, proc = coroutine.resume(job.co)
+			print("make.jobs.dispatch:",ok,proc)
 			make.jobs.current = nil
 			if not ok or coroutine.status(job.co) == "dead" then
 				-- job finished; remove from list
-				self.running[jobid] = nil
+				make.jobs.running[jobid] = nil
 				for target_name in pairs(job.targets) do
 					target[target_name].status = make.status.updated
 				end
-				self.count = self.count - 1
+				make.jobs.count = make.jobs.count - 1
+				if not ok then error(proc); end -- propagate any error
 			elseif proc ~= nil then
 				-- job still running, but waiting on an external process
 				job.proc = proc
@@ -270,8 +271,8 @@ make.jobs.dispatch = function(self)
 				shouldwait = false
 			end
 		end
-		--print("make.jobs.dispatch: dispatched "..tostring(self.count).." jobs")
-		if job_count ~= self.count and self.count < self.slots then break; end -- open slots
+		--print("make.jobs.dispatch: dispatched "..tostring(make.jobs.count).." jobs")
+		if job_count ~= make.jobs.count and make.jobs.count < make.jobs.slots then break; end -- open slots
 		if job_count == 0 then break; end -- no more running jobs
 
 		-- wait for some change in job status
@@ -283,26 +284,32 @@ end
 	Name: 	make.jobs.start
 	Action:	Start a job coroutine
 -------------------------------------------------------------------------]]--
-make.jobs.start = function(self, fn, target)
+make.jobs.start = function(target)
 	-- increment the job number
-	self.pos = self.pos + 1
+	make.jobs.pos = make.jobs.pos + 1
 
 	-- create & start the coroutine
-	local co = coroutine.create(fn)
-	self.current = { id = self.pos, co = co, targets = {} }
-	self.current.targets[target.name] = true
-	local status, proc = coroutine.resume(co, target)
-
-	-- insert the new coroutine into the list of running jobs
-	if status and coroutine.status(co) ~= "dead" then
-		self.current.proc = proc
-		self.running[self.pos] = self.current
-		self.current = nil
-		self.count = self.count + 1
-		return true -- job is running
+	local co = coroutine.create(target.command)
+	make.jobs.current = { id = make.jobs.pos, co = co, targets = {} }
+	make.jobs.current.targets[target.name] = true
+	local ok, proc = coroutine.resume(co, target)
+	print("make.jobs.start:",ok,proc)
+	if not ok then
+		target.status = make.status.error
+		target.errmsg = proc
+	elseif coroutine.status(co) ~= "dead" then
+		-- insert the new coroutine into the list of running jobs
+		make.jobs.current.proc = proc
+		make.jobs.running[make.jobs.pos] = make.jobs.current
+		make.jobs.current = nil
+		make.jobs.count = make.jobs.count + 1
+		target.status = make.status.running -- job is running
+	else
+		-- job is not running (simple; already finished)
+		make.jobs.current = nil
+		target.status = make.status.updated
 	end
-	self.current = nil
-	return false -- job is not running (simple; already finished)
+	return target.status
 end
 
 --[[-------------------------------------------------------------------------
@@ -381,7 +388,13 @@ function make.update_goals()
 
 		-- dispatch any running jobs
 		if make.jobs.count > 0 and (make.jobs.count == job_count or make.jobs.count >= make.jobs.slots) then
-			make.jobs:dispatch()
+			local ok, errormsg = pcall(make.jobs.dispatch)
+			print(ok, errormsg)
+			if not ok then
+				print("presto: *** error updating target '".. goal_name .."'.  Stop.")
+				print(errormsg)
+				os.exit(1)
+			end
 		end
 
 		-- stop if we've run out of goals
