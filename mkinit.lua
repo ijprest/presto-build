@@ -92,14 +92,14 @@ function __target:depends_on(deps_list)
 
 		-- a target directly used as a dependency
 		elseif type(v) == "table" and v[__is_target] then
-			if not(v.name) then error("dependency "..k.." is unnamed",2) end
+			if not(v.name) then error("Dependency '"..k.."' is unnamed.",2) end
 			make.debug_msg{"adding dep",v.name,"to",self.name}
 			if __target[v.name] then __target[v.name]:check_for_cycle(self.name,v.name,1) end
 			self.deps[v.name] = true
 
 		-- don't understand this target type
 		else
-			error("dependency "..k.." is not a valid dependency target",2)
+			error("Dependency "..k.." is not a valid dependency target.",2)
 		end
 	end
 end
@@ -109,7 +109,7 @@ end
 	Action:	Traverse the dependency hierarchy and ensure there are no cycles
 -------------------------------------------------------------------------]]--
 function __target:check_for_cycle(t, d, i)
-	if self.name == t then error("cyclical dependency on target '"..t.."' . '"..d.."' . '"..t.."'",i+2) end
+	if self.name == t then error("Cyclical dependency on target '"..t.."' . '"..d.."' . '"..t.."'.",i+2) end
 	for k,v in pairs(self.deps) do target[k]:check_for_cycle(t,d,i+1) end
 end
 
@@ -133,7 +133,9 @@ function __target:bring_up_to_date()
 	for dep_name in pairs(self.deps) do
 		-- update the dependency
 		local dep = target[dep_name]
-		local dep_status = dep:bring_up_to_date()
+		local ok, dep_status = pcall(dep.bring_up_to_date,dep)
+		if not ok then dep_status = make.status.error; end
+
 		if dep_status == make.status.updated then
 			-- dependency was updated; we must build
 			must_build = true; self.deps_newer[dep_name] = true
@@ -147,17 +149,22 @@ function __target:bring_up_to_date()
 			end
 		elseif dep_status == make.status.error then
 			-- ummm...
-			print("presto1: *** Error updating target '".. dep.name .."':")
+			print("presto: *** Error updating target '".. dep.name .."':")
 			if dep.errmsg then print("presto: *** "..dep.errmsg) end
-			self.status = make.status.error
-			return self.status
+			if not make.flags.keep_going then
+				self.status = make.status.error
+				return self.status
+			end
+			-- prune the dep so we don't keep trying (and printing errors)
+			self.deps[dep_name] = nil
+			self.dep_status = make.status.error
 		elseif dep_status == make.status.running then
 			-- dependency is being built
 			must_wait = true
 			-- if job slots are full then break
 			if make.jobs.count >= make.jobs.slots then break; end
 		else
-			error("unknown make.status value '".. dep_status .."'")
+			error("Unknown make.status value '".. dep_status .."'.")
 		end
 	end
 
@@ -166,11 +173,19 @@ function __target:bring_up_to_date()
 		return make.status.running
 	end
 
+	-- if any deps failed, then we can't continue (even with -k)
+	if self.dep_status == make.status.error then
+		self.status = make.status.error
+		return self.status
+	end
+
 	-- do we need to build?
 	if must_build then
 		if make.flags.question and self.command ~= phony_target.command then
-			print("presto: *** Must remake target '" .. self.name .. "'")
-			make.exit() -- not a true error; code just indicates that the target status
+			-- not a true error; code just indicates that the target status
+			self.status = make.status.error
+			self.errmsg = "Must remake target '" .. self.name .. "'"
+			error(self.errmsg,0)
 		end
 
 		if self.command then
@@ -179,8 +194,8 @@ function __target:bring_up_to_date()
 		elseif not(make.flags.always_make) or not(self:exists()) then
 			-- don't know how to build; error
 			self.status = make.status.error
-			self.errmsg = "no rule to make target '".. self.name .."'"
-			return self.status
+			self.errmsg = "No rule to make target '".. self.name .."'"
+			error(self.errmsg,0)
 		end
 	end
 
@@ -267,7 +282,6 @@ make.jobs.dispatch = function(self)
 				if not ok then
 					local errmsg = ""
 					for target_name in pairs(job.targets) do errmsg = errmsg .. " '" .. target_name .. "'"; end
-					print("presto: *** Error during job dispatch.")
 					print("presto: *** Error updating target"..errmsg..".")
 					if proc then print("presto: *** "..proc); end
 					make.exit()
@@ -378,12 +392,18 @@ function make.update_goals()
 
 			-- bring the current goal up to date
 			local goal = target[goal_name]
-			local goal_status = goal:bring_up_to_date()
+			local ok,goal_status = pcall(goal.bring_up_to_date,goal)
+			if not ok then
+				goal.errmsg = goal_status
+				goal_status = make.status.error
+			end
 
 			if goal_status ~= make.status.running then
 				if goal_status == make.status.error then
 					-- goal finished with an error
-					print("presto: *** Error updating goal '".. goal_name .."'.")
+					if not make.flags.question then
+						print("presto: *** Error updating goal '".. goal_name .."'.")
+					end
 					if goal.errmsg then print("presto: *** " .. goal.errmsg) end
 					make.exit()
 				elseif goal_status == make.status.none then
@@ -413,7 +433,7 @@ function make.update_goals()
 	-- if there were any errors, print a final message and exit
 	if make.failure then
 		print("presto: *** One or more targets not remade due to errors.")
-		error("*** Stop.",0)
+		error("Stop.",0) -- this should be unhandled; will reach the OS
 	end
 end
 
@@ -426,7 +446,7 @@ function make.exit(exit_code)
 			end
 			print("presto: *** One or more targets not remade due to errors.")
 		end
-		error("*** Stop.",0)
+		error("Stop.",0) -- this should be unhandled; will reach the OS
 	end
 	make.failure = true
 end

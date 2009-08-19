@@ -60,7 +60,7 @@ static void print_usage(void) {
 }
 
 static void l_message(const char* msg) {
-	fprintf(stderr, "presto: %s\n", msg);
+	fprintf(stderr, "presto: *** %s\n", msg);
 	fflush(stderr);
 }
 
