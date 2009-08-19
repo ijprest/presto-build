@@ -136,15 +136,19 @@ static int traceback(lua_State* L) {
 	Action:		Call a chunk of Lua code
 
 ***********************************************************************EDOC*/
-static int docall(lua_State* L, int narg, int clear) {
-	int status;
-	int base = lua_gettop(L) - narg;  // function index
-	lua_pushcfunction(L, traceback);  // push traceback function
-	lua_insert(L, base);  // put it under chunk and args 
+static int docall(lua_State* L, int narg, int stack = 1) {
+	int base = 0; 
+	if(stack) {
+		base = lua_gettop(L) - narg;	// function index
+		lua_pushcfunction(L, traceback);  // push traceback function
+		lua_insert(L, base);  // put it under chunk and args 
+	}
 	signal(SIGINT, laction);
-	status = lua_pcall(L, narg, (clear ? 0 : LUA_MULTRET), base);
+	int status = lua_pcall(L, narg, 0, base);
 	signal(SIGINT, SIG_DFL);
-	lua_remove(L, base);  // remove traceback function
+	if(stack) {
+		lua_remove(L, base);  // remove traceback function
+	}
 	// force a complete garbage collection in case of errors
 	if(status != 0) lua_gc(L, LUA_GCCOLLECT, 0);
 	return status;
@@ -161,19 +165,19 @@ static int docall(lua_State* L, int narg, int clear) {
 
 ***********************************************************************EDOC*/
 static int dofile(lua_State* L, const char* name) {
-	int status = luaL_loadfile(L, name) || docall(L, 0, 1);
+	int status = luaL_loadfile(L, name) || docall(L, 0);
 	return report(L, status);
 }
 
 static int dostring(lua_State* L, const char* s, const char* name) {
-	int status = luaL_loadbuffer(L, s, strlen(s), name) || docall(L, 0, 1);
+	int status = luaL_loadbuffer(L, s, strlen(s), name) || docall(L, 0);
 	return report(L, status);
 }
 
 static int dolibrary(lua_State* L, const char* name) {
 	lua_getglobal(L, "require");
 	lua_pushstring(L, name);
-	return report(L, docall(L, 1, 1));
+	return report(L, docall(L, 1));
 }
 
 
@@ -357,7 +361,10 @@ static int pmain(lua_State* L) {
 	lua_getfield(L,-1,"update_goals");
 	lua_remove(L,-2); // remove "make"
 	luaL_checktype(L, -1, LUA_TFUNCTION);
-	handle_status(docall(L,0,1));
+	if(report(L, docall(L,0,0))) {
+		lua_pushnil(L);
+		lua_error(L);
+	}
 	return 0;
 }
 #undef bad_usage

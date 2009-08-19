@@ -147,7 +147,7 @@ function __target:bring_up_to_date()
 			end
 		elseif dep_status == make.status.error then
 			-- ummm...
-			print("presto: *** error updating target '".. dep.name .."':")
+			print("presto1: *** Error updating target '".. dep.name .."':")
 			if dep.errmsg then print("presto: *** "..dep.errmsg) end
 			self.status = make.status.error
 			return self.status
@@ -169,8 +169,8 @@ function __target:bring_up_to_date()
 	-- do we need to build?
 	if must_build then
 		if make.flags.question and self.command ~= phony_target.command then
-			print("presto: *** must remake target '" .. self.name .. "'")
-			os.exit(1)
+			print("presto: *** Must remake target '" .. self.name .. "'")
+			make.exit() -- not a true error; code just indicates that the target status
 		end
 
 		if self.command then
@@ -179,7 +179,8 @@ function __target:bring_up_to_date()
 		elseif not(make.flags.always_make) or not(self:exists()) then
 			-- don't know how to build; error
 			self.status = make.status.error
-			error("no rule to make target '".. self.name .."'")
+			self.errmsg = "no rule to make target '".. self.name .."'"
+			return self.status
 		end
 	end
 
@@ -243,7 +244,6 @@ setmetatable(target, {
 make.jobs = {	pos = 0, slots = 1, count = 0, running = {} }
 make.jobs.dispatch = function(self)
 	while true do
-		--print("make.jobs.dispatch: dispatching jobs")
 		local shouldwait = true
 		local waiting = {}
 		local job_count = make.jobs.count
@@ -252,16 +252,26 @@ make.jobs.dispatch = function(self)
 			-- restart the thread and let it do some work
 			make.jobs.current = job
 			local ok, proc = coroutine.resume(job.co)
-			print("make.jobs.dispatch:",ok,proc)
 			make.jobs.current = nil
 			if not ok or coroutine.status(job.co) == "dead" then
 				-- job finished; remove from list
 				make.jobs.running[jobid] = nil
 				for target_name in pairs(job.targets) do
 					target[target_name].status = make.status.updated
+					if not ok then
+						target[target_name].status = make.status.error
+						target[target_name].errmsg = proc
+					end
 				end
 				make.jobs.count = make.jobs.count - 1
-				if not ok then error(proc); end -- propagate any error
+				if not ok then
+					local errmsg = ""
+					for target_name in pairs(job.targets) do errmsg = errmsg .. " '" .. target_name .. "'"; end
+					print("presto: *** Error during job dispatch.")
+					print("presto: *** Error updating target"..errmsg..".")
+					if proc then print("presto: *** "..proc); end
+					make.exit()
+				end
 			elseif proc ~= nil then
 				-- job still running, but waiting on an external process
 				job.proc = proc
@@ -271,7 +281,6 @@ make.jobs.dispatch = function(self)
 				shouldwait = false
 			end
 		end
-		--print("make.jobs.dispatch: dispatched "..tostring(make.jobs.count).." jobs")
 		if job_count ~= make.jobs.count and make.jobs.count < make.jobs.slots then break; end -- open slots
 		if job_count == 0 then break; end -- no more running jobs
 
@@ -293,22 +302,21 @@ make.jobs.start = function(target)
 	make.jobs.current = { id = make.jobs.pos, co = co, targets = {} }
 	make.jobs.current.targets[target.name] = true
 	local ok, proc = coroutine.resume(co, target)
-	print("make.jobs.start:",ok,proc)
 	if not ok then
+		-- coroutine threw an error
 		target.status = make.status.error
 		target.errmsg = proc
 	elseif coroutine.status(co) ~= "dead" then
 		-- insert the new coroutine into the list of running jobs
 		make.jobs.current.proc = proc
 		make.jobs.running[make.jobs.pos] = make.jobs.current
-		make.jobs.current = nil
 		make.jobs.count = make.jobs.count + 1
 		target.status = make.status.running -- job is running
 	else
 		-- job is not running (simple; already finished)
-		make.jobs.current = nil
 		target.status = make.status.updated
 	end
+	make.jobs.current = nil
 	return target.status
 end
 
@@ -323,9 +331,15 @@ make.run = function(command, env, printfn)
 	local proc = make.proc.spawn(command, env)
 	proc.print = printfn
 	-- pipe all output until the process exits
-	while make.proc.exit_code(proc) == nil do
+	local exit_code = make.proc.exit_code(proc)
+	while exit_code == nil do
 		coroutine.yield(proc)
 		make.proc.flushio(proc)
+		exit_code = make.proc.exit_code(proc)
+	end
+	-- throw error if command failed
+	if exit_code ~= 0 then
+		error("[".. command .."] Error "..tostring(exit_code),0)
 	end
 end
 
@@ -350,7 +364,7 @@ end
 make.goals = make.util.target_list:new{}
 function make.update_goals()
 	if not next(make.goals) then
-		if __target.__default == nil then error("*** No targets.  Stop.",2); end
+		if __target.__default == nil then error("*** No targets.  Stop.",0); end
 		make.goals[target.__default.name] = true
 	end
 
@@ -369,8 +383,9 @@ function make.update_goals()
 			if goal_status ~= make.status.running then
 				if goal_status == make.status.error then
 					-- goal finished with an error
-					print("presto: *** error updating target '".. goal_name .."'.  Stop.")
-					os.exit(1)
+					print("presto: *** Error updating goal '".. goal_name .."'.")
+					if goal.errmsg then print("presto: *** " .. goal.errmsg) end
+					make.exit()
 				elseif goal_status == make.status.none then
 					-- goal was already up to date
 					print("presto: *** nothing to be done for '".. goal_name .."'.")
@@ -388,18 +403,32 @@ function make.update_goals()
 
 		-- dispatch any running jobs
 		if make.jobs.count > 0 and (make.jobs.count == job_count or make.jobs.count >= make.jobs.slots) then
-			local ok, errormsg = pcall(make.jobs.dispatch)
-			print(ok, errormsg)
-			if not ok then
-				print("presto: *** error updating target '".. goal_name .."'.  Stop.")
-				print(errormsg)
-				os.exit(1)
-			end
+			make.jobs.dispatch()
 		end
 
 		-- stop if we've run out of goals
 		if goal_count == 0 then break; end
 	end
+
+	-- if there were any errors, print a final message and exit
+	if make.failure then
+		print("presto: *** One or more targets not remade due to errors.")
+		error("*** Stop.",0)
+	end
+end
+
+function make.exit(exit_code)
+	if not make.flags.keep_going then
+		if make.jobs.count > 0 then
+			print("presto: *** Waiting for other jobs to finish...")
+			while make.jobs.count > 0 do
+				pcall(make.jobs.dispatch) -- use pcall to suck up errors
+			end
+			print("presto: *** One or more targets not remade due to errors.")
+		end
+		error("*** Stop.",0)
+	end
+	make.failure = true
 end
 
 
