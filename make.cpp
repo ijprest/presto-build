@@ -85,12 +85,21 @@ static int report(lua_State* L, int status) {
 
 /*SDOC***********************************************************************
 
-	Name:			lstop
+	Name:			setsignal
+						lstop
 						laction
 
 	Action:		Signal handlers when Lua code is running
 
 ***********************************************************************EDOC*/
+typedef void(*psighndlr)(int);
+psighndlr setsignal(psighndlr sighndlr) {
+	signal(SIGABRT, sighndlr);
+	signal(SIGBREAK, sighndlr);	
+	signal(SIGTERM, sighndlr);
+	return signal(SIGINT, sighndlr);
+}
+
 static void lstop(lua_State* L, lua_Debug* /*ar*/) {
 	lua_sethook(L, NULL, 0, 0);
 	luaL_error(L, "interrupted!");
@@ -143,9 +152,9 @@ static int docall(lua_State* L, int narg, int stack = 1) {
 		lua_pushcfunction(L, traceback);  // push traceback function
 		lua_insert(L, base);  // put it under chunk and args 
 	}
-	signal(SIGINT, laction);
+	psighndlr oldsig = setsignal(laction);
 	int status = lua_pcall(L, narg, 0, base);
-	signal(SIGINT, SIG_DFL);
+	setsignal(oldsig);
 	if(stack) {
 		lua_remove(L, base);  // remove traceback function
 	}
@@ -379,7 +388,6 @@ static int pmain(lua_State* L) {
 
 ***********************************************************************EDOC*/
 int main(int argc, char** argv) {
-	
 	// create lua state
 	lua_State* L = lua_open();
 	if(L == NULL) {
