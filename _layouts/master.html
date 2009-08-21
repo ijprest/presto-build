@@ -8,6 +8,10 @@
 #menu { padding-top: 18px; }
 #menu ul { list-style-type: none; }
 #footer { text-align:center; font-style:italic; }
+
+body { font-size:85%; font-family: "Segoe UI", "Helvetica Neue", Arial, Helvetica, sans-serif; }
+div.leftcolborder { padding-left: 24px; margin-left: 25px; border-left: 1px solid #eee; }
+
 </style>
 </head>
 <body>
@@ -15,22 +19,23 @@
 <div class='container'>
   <div id='header' class='span-24 last'>&nbsp;</div>
   
-  <div id='left-col' class='span-5'>
-    <img class='last' src='images/logo.png'/>
-    <div id='menu' class='span-5 last'>
+  <div id='left-col' class='span-3'>
+    <center><img class='last' src='images/logo.png'/></center>
+    <div id='menu'>
       <ul>
       <li><a href='index.html'>Home</a></li>
       <li><a href='license.html'>License</a></li>
       <li><a href='http://github.com/ijprest/presto-build/downloads'>Downloads</a></li>
       <li><a href='http://github.com/ijprest/presto-build/tree/master'>Source</a></li>
       <li><a href='http://wiki.github.com/ijprest/presto-build'>Wiki</a></li>
-      <li><a href='http://github.com/ijprest/presto-build/issues'>Bugs / Feature Requests</a></li>
+      <li><a href='http://github.com/ijprest/presto-build/issues'>Bugs	</a></li>
       </td>
     </div>
   </div>
   
-  <div id='content' class='span-19 last'>
+  <div id='content' class='span-19 last leftcolborder'>
     <h2>Presto-Build - {{ page.title }}</h2>
+		<hr/>
     {{ content }}
   </div>
 
