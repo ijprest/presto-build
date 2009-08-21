@@ -361,7 +361,7 @@ static int pmain(lua_State* L) {
 		} else if(PathFileExistsA("makefile")) {
 			handle_status(dofile(L, "makefile"));
 		} else {
-			luaL_error(L, "*** No targets specified and no makefile found.  Stop.");
+			luaL_error(L, "No targets specified and no makefile found.  Stop.");
 		}		
 	}
 			

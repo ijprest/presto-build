@@ -19,7 +19,6 @@ make.status = { none = 0, updated = 1, running = 2, error = 3 }
 make.util = {}
 make.util.target_list = {}
 make.util.target_list_mt = { __index = make.util.target_list }
-setmetatable(make.util.target_list, make.util.target_list_mt)
 make.util.target_list.new = function(self, t)
 	return setmetatable(t or {}, make.util.target_list_mt)
 end
