@@ -4,3 +4,5 @@ Debug/
 *.suo
 *.exe
 *.user
+*.sdf
+*.opensdf
