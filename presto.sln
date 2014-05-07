@@ -1,9 +1,9 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.30110.0
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "presto", "presto.vcxproj", "{7216C55A-2127-4A1B-BAE0-2C03D3897176}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "lua", "lua\lua.vcxproj", "{0DA1C207-E10C-4FBA-B960-6A704D5C7D7E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,10 +15,6 @@ Global
 		{7216C55A-2127-4A1B-BAE0-2C03D3897176}.Debug|Win32.Build.0 = Debug|Win32
 		{7216C55A-2127-4A1B-BAE0-2C03D3897176}.Release|Win32.ActiveCfg = Release|Win32
 		{7216C55A-2127-4A1B-BAE0-2C03D3897176}.Release|Win32.Build.0 = Release|Win32
-		{0DA1C207-E10C-4FBA-B960-6A704D5C7D7E}.Debug|Win32.ActiveCfg = Debug|Win32
-		{0DA1C207-E10C-4FBA-B960-6A704D5C7D7E}.Debug|Win32.Build.0 = Debug|Win32
-		{0DA1C207-E10C-4FBA-B960-6A704D5C7D7E}.Release|Win32.ActiveCfg = Release|Win32
-		{0DA1C207-E10C-4FBA-B960-6A704D5C7D7E}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

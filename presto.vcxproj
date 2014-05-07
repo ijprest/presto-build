@@ -127,12 +127,6 @@
     <ClInclude Include="md5.h" />
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="lua\lua.vcxproj">
-      <Project>{0da1c207-e10c-4fba-b960-6a704d5c7d7e}</Project>
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
