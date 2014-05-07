@@ -2,7 +2,7 @@
 
 	Module:				make.cpp
 
-	Copyright (C) 2009 Ian Prest
+	Copyright (C) 2009-2014 Ian Prest
 	http://ijprest.github.com/presto-build/license.html
 
 	Description:	Main entry point for the application
@@ -34,7 +34,7 @@ struct Smain {
 
 ***********************************************************************EDOC*/
 static void print_version(void) {
-	fprintf(stderr, "Presto Build 0.1 (new-wolf-moon), Copyright (C) 2009 Ian Prest\n"
+	fprintf(stderr, "Presto Build 0.1 (new-wolf-moon), Copyright (C) 2009-2014 Ian Prest\n"
 									LUA_RELEASE ", " LUA_COPYRIGHT "\n");
 	fflush(stderr);
 }

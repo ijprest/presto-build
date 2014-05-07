@@ -2,7 +2,7 @@
 
 	Module:				stdafx.h
 
-	Copyright (C) 2009 Ian Prest
+	Copyright (C) 2009-2014 Ian Prest
 	http://ijprest.github.com/presto-build/license.html
 
 	Description:	Precompiled header file for MSVC

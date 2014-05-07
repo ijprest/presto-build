@@ -1,5 +1,6 @@
 Release/
 Debug/
+ipch/
 *.ncb
 *.suo
 *.exe
