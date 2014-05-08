@@ -18,10 +18,12 @@
 #include <string.h>
 #include <malloc.h>
 
+extern "C" {
 #define LUA_LIB
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+}
 
 #include <vector>
 

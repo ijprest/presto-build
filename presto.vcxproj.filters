@@ -19,8 +19,8 @@
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="mkinit.lua">
+    <None Include="lua\mkinit.lua">
       <Filter>lua</Filter>
-    </CustomBuild>
+    </None>
   </ItemGroup>
 </Project>
