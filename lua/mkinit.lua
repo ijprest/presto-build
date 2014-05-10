@@ -248,10 +248,13 @@ __newindex = function(self, key, value)
 	if string.match(key,"\\") then error("target name should not contain backslashes",2) end
 	-- prevent redefining protected members (e.g., "target.new")
 	if __target[key] ~= nil then error("cannot modify protected value (or existing target) '"..tostring(key).."'",2) end
+	-- if a function is added as a target, that function is assumed to be the command
+	if type(value) == "function" then self[key] = self:new{ command = value }; return; end
 	-- ensure that everything added to the table is actually a "target" object
 	if type(value) ~= "table" or not(value[__is_target]) then error("rvalue is not a target",2) end
 	-- first target specified is the "default goal" target
 	if __target.__default == nil then __target.__default = value end
+
 	value.name = key
 	__target[key] = value
 end,
