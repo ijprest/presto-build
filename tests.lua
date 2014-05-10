@@ -26,6 +26,7 @@ assert(make.path.where("notepad.exe",{"c:/windows","c:/windows/system32"}) == "c
 assert(make.path.where("notepad.exe","c:/windows;c:/windows/system32") == "c:/windows/notepad.exe")
 assert(make.file.exists("c:/windows/notepad.exe"))
 assert(not(make.file.exists("a-file-that-should-not-exist")))
+assert(make.path.remove_ext("c:/path°/to/foo.cpp") == "c:/path°/to/foo") -- Test UTF-8 round-tripping
 
 tempfile = make.file.temp()
 assert(tempfile and make.file.exists(tempfile) and make.file.size(tempfile) == 0)
