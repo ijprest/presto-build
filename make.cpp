@@ -68,9 +68,24 @@ static void l_message(const char* msg) {
 	fputs("presto: *** ", stderr);
   SetConsoleTextAttribute(hstdout, sbi.wAttributes);
 
-	// Echo everything up until the stack trace
+	// Print the message line-by-line
+	while(msg && *msg) {
+		// Accumulate the next line
+		const char* next_line = msg;
+		while(*next_line && *next_line++ != '\n') {}
+
+		// If it's the start of the stack, change the color to a dark-grey
+		if(strncmp("stack traceback:", msg, 16) == 0)
+			SetConsoleTextAttribute(hstdout, sbi.wAttributes & 0xf0 | 0x08);
+
+		// Write the line and advance
+		fwrite(msg, next_line-msg, sizeof(char), stderr);
+		msg = next_line;
+	}
+
 	fprintf(stderr, "%s\n", msg);
 	fflush(stderr);
+  SetConsoleTextAttribute(hstdout, sbi.wAttributes);
 }
 
 
