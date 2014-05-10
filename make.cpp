@@ -60,7 +60,16 @@ static void print_usage(void) {
 }
 
 static void l_message(const char* msg) {
-	fprintf(stderr, "presto: *** %s\n", msg);
+	// Set the foreground color to red
+	HANDLE hstdout = GetStdHandle(STD_OUTPUT_HANDLE);
+  CONSOLE_SCREEN_BUFFER_INFO sbi = {};
+  GetConsoleScreenBufferInfo(hstdout, &sbi);
+  SetConsoleTextAttribute(hstdout, sbi.wAttributes & 0xf0 | 0x0C);
+	fputs("presto: *** ", stderr);
+  SetConsoleTextAttribute(hstdout, sbi.wAttributes);
+
+	// Echo everything up until the stack trace
+	fprintf(stderr, "%s\n", msg);
 	fflush(stderr);
 }
 
