@@ -16,6 +16,18 @@
 //***************************  helper functions  ****************************
 //***************************************************************************
 
+const char* lua_converttostring(lua_State* L, int pos, size_t* len) {
+	if(lua_isstring(L,pos))
+		return lua_tolstring(L,pos,len);
+	lua_getglobal(L, "tostring");
+	lua_pushvalue(L,pos);
+	lua_call(L,1,1);
+	const char* out = lua_tolstring(L,-1,len);
+	lua_pop(L,1);
+	return out;
+}
+
+
 /*SDOC***********************************************************************
 
 	Name:			lua_getpath
@@ -416,7 +428,7 @@ static int make_path_change_ext(lua_State* L) {
 
 	Name:			make_path_combine
 
-	Action:		Combines two path fragments.
+	Action:		Combines two or more path fragments.
 
 	Params:		[1] string - directory part (e.g., "c:/path")
 						[2] string - file part (e.g., "to/foo.cpp")
@@ -426,11 +438,17 @@ static int make_path_change_ext(lua_State* L) {
 	Comments:	Adds extra slashes as necessary.
 
 ***********************************************************************EDOC*/
-static int make_path_combine(lua_State* L) {
-  size_t l1; wchar_t* path1 = lua_getpath(L, 1, &l1);
-  size_t l2; wchar_t* path2 = lua_getpath(L, 2, &l2);
+int make_path_combine(lua_State* L) {
 	wchar_t path_out[MAX_PATH] = {};
-	PathCombineW(path_out, path1, path2);
+	wchar_t path[MAX_PATH];
+	// extract all the path strings
+	int pos = 1;
+	while(!lua_isnoneornil(L,pos)) {
+		size_t lua_path_len;
+		const char* lua_path = lua_converttostring(L, pos++, &lua_path_len);
+		_lua_topath(path, lua_path, &lua_path_len);
+		PathCombineW(path_out, path_out, path);
+	}
 	lua_pushpath(L, path_out);
 	return 1;
 }
@@ -453,7 +471,10 @@ static int make_path_common(lua_State* L) {
   size_t l2; wchar_t* path2 = lua_getpath(L, 2, &l2);
 	wchar_t path_out[MAX_PATH] = {};
 	PathCommonPrefixW(path1, path2, path_out);
-	lua_pushpath(L, path_out);
+	if(path_out[0])
+		lua_pushpath(L, path_out);
+	else
+		lua_pushnil(L);
 	return 1;
 }
 
@@ -508,7 +529,6 @@ static int make_path_glob(lua_State* L) {
 static int make_path_where(lua_State* L) {
 	size_t l; wchar_t* path_in = lua_getpath(L, 1, &l);
 	wchar_t path_out[MAX_PATH] = {};
-	int pos = 1;
 	if(lua_gettop(L) >= 2) { 
 		if(lua_isstring(L,2) && !lua_isnumber(L,2)) { 
 			// semi-colon separated string
@@ -516,6 +536,7 @@ static int make_path_where(lua_State* L) {
 			SearchPathW(path,path_in,NULL,MAX_PATH,path_out,NULL);
 		} else if(lua_istable(L,2))  {
 			// extract all the path strings
+			int pos = 1;
 			wchar_t path[32768];
 			wchar_t* path_pos = path;
 			while(1) {
@@ -895,9 +916,24 @@ int make_dir_cd(lua_State* L) {
 	Params:		[1] string - new directory
 
 ***********************************************************************EDOC*/
+static bool __make_dir_md(wchar_t* path_in) {
+	if(PathIsDirectoryW(path_in))
+		return true;
+	wchar_t sep = 0;
+	wchar_t* path_out = PathFindFileNameW(path_in);
+	sep = *path_out;
+	*path_out = 0;
+	if(!__make_dir_md(path_in)) {
+		*path_out = sep;
+		return false;
+	}
+	*path_out = sep;
+	return CreateDirectoryW(path_in, NULL) ? true : false;
+}
+
 static int make_dir_md(lua_State* L) {
 	size_t l; wchar_t* path_in = lua_getpath(L, 1, &l);
-	if(!CreateDirectoryW(path_in, NULL))
+	if(!__make_dir_md(path_in))
 		luaL_error(L, "error creating directory " LUA_QS, path_in);
 	return 0;
 }
@@ -971,7 +1007,10 @@ struct process {
 ***********************************************************************EDOC*/
 static int make_proc_spawn(lua_State* L) {
 	// retrieve the command-line
-	size_t l; wchar_t* command_line = lua_getpath(L, 1, &l);
+	size_t l; 
+	const char* command_lineA = lua_tolstring(L, 1, &l);
+	wchar_t* command_line = (wchar_t*)alloca((l+1)*sizeof(wchar_t));
+	l = MultiByteToWideChar(CP_UTF8, 0, command_lineA, (int)l+1, command_line, (int)l+1);
 
 	// retrieve the environment
 	char* env = NULL;
@@ -1277,7 +1316,8 @@ static int make_now(lua_State* L) {
 	Returns:	[1] string - MD5 hash (hex-coded)
 
 	Comments:	This function should be used with caution.  Presto is 
-						single-threaded, so calling this function on a large string.
+						single-threaded, so calling this function on a large string will
+						prevent any other jobs from starting.
 
 ***********************************************************************EDOC*/
 static int make_md5(lua_State* L) {
@@ -1296,9 +1336,51 @@ static int make_md5(lua_State* L) {
 	return 1;
 }
 
+
+/*SDOC***********************************************************************
+
+	Name:			make_message
+						make_error
+						make_warning
+						make_success
+
+	Action:		Prints an error message to stderr
+
+	Params:		[1] string - string to print
+
+***********************************************************************EDOC*/
+static int make_message_helper(lua_State* L, int color) {
+	const char* string = luaL_checkstring(L, 1);
+	HANDLE hstdout = GetStdHandle(STD_OUTPUT_HANDLE);
+  CONSOLE_SCREEN_BUFFER_INFO sbi = {};
+  GetConsoleScreenBufferInfo(hstdout, &sbi);												// Get original color
+  SetConsoleTextAttribute(hstdout, sbi.wAttributes & 0xf0 | color);	// Set new color
+	fputs("presto: *** ", stderr);																		// Print error header
+  SetConsoleTextAttribute(hstdout, sbi.wAttributes);								// Restore original color
+	fputs(string, stderr);																						// Echo the string
+	fputs("\n", stderr);
+	return 0;
+}
+static int make_message(lua_State* L) { 
+	return make_message_helper(L, 0x0b); // cyan
+}
+static int make_error(lua_State* L) { 
+	return make_message_helper(L, 0x0c); // red
+}
+static int make_warning(lua_State* L) { 
+	return make_message_helper(L, 0x0e); // yellow
+}
+static int make_success(lua_State* L) { 
+	return make_message_helper(L, 0x0a); // green
+}
+
 static const luaL_Reg make_rootlib[] = {
-	{"now", make_now},													// make.now
-	{"md5", make_md5},													// make.md5
+	{"now", make_now},							// make.now
+	{"md5", make_md5},							// make.md5
+	{"message", make_message},			// make.message
+	{"error", make_error},					// make.error
+	{"warning", make_warning},			// make.warning
+	{"success", make_success},			// make.success
   {NULL, NULL}
 };
 
@@ -1307,17 +1389,31 @@ static const luaL_Reg make_rootlib[] = {
 //****************************  misc functions  *****************************
 //***************************************************************************
 
+LUALIB_API int make_dofile(lua_State* L) {
+	fprintf(stderr, "1\n");
+	lua_pushvalue(L, lua_upvalueindex(1));	// original "dofile"
+	lua_pushvalue(L, 1);										// filename
+	int n = lua_gettop(L);
+	lua_call(L, 1, LUA_MULTRET);
+	int n2 = lua_gettop(L);
+
+	return 0;
+}
+
+
+
+
+
+
 /*SDOC***********************************************************************
 
 	Name:			luaopen_make
 
 	Action:		Registers the make.* library functions.
 
-	Comments:	This function should be used with caution.  Presto is 
-						single-threaded, so calling this function on a large string.
-
 ***********************************************************************EDOC*/
 LUALIB_API int luaopen_make(lua_State* L) {
+
 	// FILETIME is a 64-bit int, representing 100-nanosecond increments since 1/1/1601.
 	// We want our numbers to fit nicely into a double without losing any precision, so
 	// we subtract out the start-time.
@@ -1327,9 +1423,15 @@ LUALIB_API int luaopen_make(lua_State* L) {
 	SystemTimeToFileTime(&st, &ft2);
 	start_time = (__int64)ft2.dwLowDateTime | (((__int64)ft2.dwHighDateTime)<<32);
 
-	// Set up environment table (make.env)
+	// Replace the 'dofile' method with out own version
+	lua_getfield(L, LUA_GLOBALSINDEX, "dofile");
+	lua_pushcclosure(L, make_dofile, 1);
+	lua_setfield(L, LUA_GLOBALSINDEX, "dofile");
+
+	// Set up the make table (make)
 	lua_newtable(L);
-	lua_pushstring(L, "env");
+
+	// Set up environment table (make.env)
 	lua_newtable(L);
 	char keyb[32768], valueb[32768];
 	#undef GetEnvironmentStrings
@@ -1347,11 +1449,23 @@ LUALIB_API int luaopen_make(lua_State* L) {
 			lua_settable(L, -3); // make.env[key] = value
 		}
 	}
-	lua_settable(L, -3); // make.env
+	lua_setfield(L, -2, "env"); // make.env
+
+	// Set up the jobs table (make.jobs)
+	lua_newtable(L);
+	lua_pushnumber(L, 0);	lua_setfield(L, -2, "pos");		// current job number; used for output messages; starts at 0
+	lua_pushnumber(L, 1);	lua_setfield(L, -2, "slots");	// total number of available job slots (-j N); default 1
+	lua_pushnumber(L, 0);	lua_setfield(L, -2, "count");	// current count of running jobs; starts at 0
+	lua_newtable(L); lua_setfield(L, -2, "running");		// table of running jobs; starts empty
+	lua_setfield(L, -2, "jobs");
 
 	// Set up make.flags (empty table, all flags default false)
 	lua_newtable(L);
 	lua_setfield(L, -2, "flags");
+
+	// make.beginning_of_time
+	lua_pushnumber(L, (std::numeric_limits<lua_Number>::lowest)());
+	lua_setfield(L, -2, "beginning_of_time");
 
 	// Register the "make" table
 	lua_setfield(L, LUA_GLOBALSINDEX, LUA_MAKELIBNAME);
@@ -1362,5 +1476,8 @@ LUALIB_API int luaopen_make(lua_State* L) {
 	luaL_register(L, LUA_MAKELIBNAME ".dir", make_dirlib);
 	luaL_register(L, LUA_MAKELIBNAME ".proc", make_proclib);
 	luaL_register(L, LUA_MAKELIBNAME, make_rootlib);
+
   return 1;
 }
+
+/*end of file*/
