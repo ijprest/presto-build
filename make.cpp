@@ -21,6 +21,8 @@ struct Smain {
 	int argc;
 	char** argv;
 	int status;
+	bool loaded_file;
+	bool quit;
 };
 
 
@@ -43,19 +45,19 @@ static void print_usage(void) {
 	fprintf(stderr,
 	"Usage: presto [options] [target] ...\n"
 	"Options:\n"
-	"  -B                          Unconditionally make all targets.\n"
-	"  -C DIRECTORY                Change to DIRECTORY before doing anything.\n"
-	"  -d                          Print lots of debugging information.\n"
-	"  -e STAT                     Execute string STAT as lua code\n"
-	"  -f FILE                     Read FILE as a makefile.\n"
-	"  -h                          Print this message and exit.\n"
-	"  -j [N]                      Allow N jobs at once.\n"
-	"  -k                          Keep going when some targets can't be made.\n"
-	"  -l LIBRARY                  Require lua library LIBRARY\n"
-	"  -n                          Noisy; echo commands as they run.\n"
-	"  -q                          Run no commands; exit status says if up to date.\n"
-	"  -Q                          Just run the lua code and exit.\n"
-	"  -v                          Print the version number of make and exit.\n");
+	"  -B            Unconditionally make all targets.\n"
+	"  -C DIRECTORY  Change to DIRECTORY before doing anything.\n"
+	"  -d            Print lots of debugging information.\n"
+	"  -e STAT       Execute string STAT as lua code\n"
+	"  -f FILE       Read FILE as a makefile.\n"
+	"  -h            Print this message and exit.\n"
+	"  -j [N]        Allow N jobs at once.\n"
+	"  -k            Keep going when some targets can't be made.\n"
+	"  -l LIBRARY    Require lua library LIBRARY\n"
+	"  -n            Noisy; echo commands as they run.\n"
+	"  -q            Run no commands; exit status says if up to date.\n"
+	"  -Q            Just run the lua code and exit.\n"
+	"  -v            Print the version number of make and exit.\n");
 	fflush(stderr);
 }
 
@@ -82,8 +84,7 @@ static void l_message(const char* msg) {
 		fwrite(msg, next_line-msg, sizeof(char), stderr);
 		msg = next_line;
 	}
-
-	fprintf(stderr, "%s\n", msg);
+	fputs("\n", stderr);
 	fflush(stderr);
   SetConsoleTextAttribute(hstdout, sbi.wAttributes);
 }
@@ -249,9 +250,9 @@ static int set_max_jobs(lua_State* L, int max_jobs) {
 
 /*SDOC***********************************************************************
 
-	Name:			pmain
+	Name:			parse_commandline
 
-	Action:		Main program loop; called in protected mode by main()
+	Action:		Parse the command-line arguments
 
 	Params:		[1] Smain* - light user data, contains program arguments
 
@@ -259,29 +260,11 @@ static int set_max_jobs(lua_State* L, int max_jobs) {
 #define bad_usage() (print_usage(), (s->status = 1), 0)
 #define handle_status(exp) {if((s->status = (exp)) != 0) return 0;}
 #define get_arg() {if(!*(sw+1) && s->argv[i+1]) {arg = s->argv[i+1];i++;} else if(*(sw+1)) {arg = sw+1;sw = NULL;} else {return bad_usage();}}
-static int pmain(lua_State* L) {
+static int parse_commandline(lua_State* L, bool executeCode) {
 	struct Smain* s = (struct Smain*)lua_touserdata(L, 1);
-	g_L = L;
-
-	// One-time initialization
-	lua_gc(L, LUA_GCSTOP, 0);			// stop garbage collector during init
-	luaL_openlibs(L);							// open std libraries (string, table, etc.)
-	luaopen_make(L);							// open custom "make" library
-	dolibrary(L, "mkinit");				// require mkinit.lua code
-	lua_gc(L, LUA_GCRESTART, 0);	// restart the garbage collector
-
-	// Handle any intialization code in the PRESTO_INIT environment variable
-	const char* init = getenv("PRESTO_INIT");
-	if(init && init[0] == '@') {
-		handle_status(dofile(L, init+1));
-	} else if(init) {
-		handle_status(dostring(L, init, "=PRESTO_INIT"));
-	}
 
 	// Parse the arguments
 	bool parsing_switches = true;
-	bool loaded_file = false;
-	bool quit = false;
 	for(int i = 1; s->argv[i] != NULL; i++) {
 		if(parsing_switches) {
 			if(s->argv[i][0] == '-') {
@@ -306,7 +289,7 @@ static int pmain(lua_State* L) {
 					case 'k': set_flag(L, "keep_going", 1); break;
 					case 'n': set_flag(L, "noisy", 1); break;
 					case 'q': set_flag(L, "question", 1); break;
-					case 'Q': quit = true; break;
+					case 'Q': set_flag(L, "quit", 1); s->quit = true; break;
 					case 'v': print_version(); s->status = 1; return 0;
 					case 'C': get_arg();	// change directory
 						lua_pushstring(L, arg);
@@ -314,14 +297,20 @@ static int pmain(lua_State* L) {
 						lua_pop(L,2);
 						break;
 					case 'e': get_arg();	// execute lua statement
-						handle_status(dostring(L, arg, "=(command line)"));
+						if(executeCode) {
+							handle_status(dostring(L, arg, "=(command line)"));
+						}
 						break;
 					case 'f': get_arg();	// execute file
-						handle_status(dofile(L, arg));
-						loaded_file = true;
+						if(executeCode) {
+							handle_status(dofile(L, arg));
+							s->loaded_file = true;
+						}
 						break;
 					case 'l': get_arg();	// require library
-						handle_status(dolibrary(L, arg));
+						if(executeCode) {
+							handle_status(dolibrary(L, arg));
+						}
 						break;
 					case 'j':	get_arg();	// max_jobs
 						set_max_jobs(L, atoi(arg));
@@ -355,7 +344,10 @@ static int pmain(lua_State* L) {
 			key = buffer;
 			while(*pos) *key++ = *pos++;
 			*key++ = 0;
-			lua_pushstring(L,buffer);
+			if(*buffer)
+				lua_pushstring(L,buffer);
+			else
+				lua_pushnil(L);
 
 			// set the value into the environment table
 			lua_settable(L, -3);
@@ -371,14 +363,62 @@ static int pmain(lua_State* L) {
 			lua_pop(L, 2); // "make", "goals"
 		}
 	}
+	return 0;
+}
+
+
+/*SDOC***********************************************************************
+
+	Name:			pmain
+
+	Action:		Main program loop; called in protected mode by main()
+
+	Params:		[1] Smain* - light user data, contains program arguments
+
+***********************************************************************EDOC*/
+static int pmain(lua_State* L) {
+	struct Smain* s = (struct Smain*)lua_touserdata(L, 1);
+	g_L = L;
+
+	// One-time initialization
+	lua_gc(L, LUA_GCSTOP, 0);								// stop garbage collector during init
+	luaL_openlibs(L);												// open std libraries (string, table, etc.)
+	luaopen_make(L);												// open custom "make" library
+	lua_gc(L, LUA_GCRESTART, 0);						// restart the garbage collector
+
+	// Command-line pass 1:  Look for environment variable overrides and (most)
+	// switches; we need these to be in place before we execute any user code.
+	parse_commandline(L, false);
+	if(s->status)
+		return 0;
+
+	// Run the setup code
+	lua_gc(L, LUA_GCSTOP, 0);								// stop garbage collector during init
+	handle_status(dolibrary(L, "mkinit"));	// require mkinit.lua code
+	handle_status(dolibrary(L, "mksite"));	// require mksite.lua code (if it exists)
+	lua_gc(L, LUA_GCRESTART, 0);						// restart the garbage collector
+
+	// Handle any intialization code in the PRESTO_INIT environment variable
+	const char* init = getenv("PRESTO_INIT");
+	if(init && init[0] == '@') {
+		handle_status(dofile(L, init+1));
+	} else if(init) {
+		handle_status(dostring(L, init, "=PRESTO_INIT"));
+	}
+
+	// Command-line pass 2: Actually run any code specified on the command-line
+	parse_commandline(L, true);
+	if(s->status)
+		return 0;
 
 	// If asked, we exit out without trying to build any goals.
 	// This is useful if the user just wants to run his Lua code.
-	if(quit) return 0;	
+	if(s->quit) 
+		return 0;	
 
 	// If we didn't load any files, try to load makefile.lua 
 	// in the current directory.
-	if(!loaded_file) {
+	if(!s->loaded_file) {
 		// try makefile.lua
 		if(PathFileExistsA("makefile.lua")) {
 			handle_status(dofile(L, "makefile.lua"));
@@ -420,7 +460,7 @@ int main(int argc, char** argv) {
 	}
 
 	// Run the main function in protected mode
-	struct Smain s = { argc, argv };
+	struct Smain s = { argc, argv, 0, false, false };
 	int status = lua_cpcall(L, &pmain, &s);
 	report(L, status);
 
@@ -429,3 +469,4 @@ int main(int argc, char** argv) {
 	return(status || s.status) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
+/*end of file*/
