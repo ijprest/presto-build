@@ -12,11 +12,36 @@ setmetatable(make.env, {
 -- Status error codes
 make.status = { none = 0, updated = 1, running = 2, error = 3 }
 
+
+--[[-------------------------------------------------------------------------
+	Name:		make.path.current_file
+	Action:	Returns the full pathname of the current makefile
+-------------------------------------------------------------------------]]--
+function make.path.current_file(in_idx)
+	local idx = 1 + (in_idx or 1)
+	while true do
+		local dbg = debug.getinfo(idx,"S")
+		if dbg == nil then return nil; end
+		if dbg.source:sub(1,1) == "@" then 
+			return make.path.full(dbg.source:sub(2))
+		end
+		idx = idx+1
+	end
+end
+
+
+--[[-------------------------------------------------------------------------
+	Name:		make.util.nil_command
+	Action:	Simple target command that doesn't do anything
+-------------------------------------------------------------------------]]--
+make.util = {}
+make.util.nil_command = function() end
+
+
 --[[-------------------------------------------------------------------------
 	Name:		make.util.target_list "class"
 	Action:	Holds a list of dependency names (as keys in the table)
 -------------------------------------------------------------------------]]--
-make.util = {}
 make.util.target_list = {}
 make.util.target_list_mt = { __index = make.util.target_list }
 make.util.target_list.new = function(self, t)
@@ -32,7 +57,7 @@ make.util.target_list_mt.__tostring = function(self)
 	local txt = ""
 	for dep_name in pairs(self) do
 		if #txt > 0 then txt = txt .. " "; end
-		txt = txt .. make.path.quote(dep_name)
+		txt = txt .. make.path.to_os(make.path.quote(dep_name))
 	end
 	return txt
 end
@@ -64,7 +89,25 @@ end
 local __target = {}
 local __is_target = {}
 __target[__is_target] = true
-__target.mt = { __index = __target }
+local __target_props = {
+	timestamp = function(self) return self.get_timestamp(self); end,
+	exists = function(self) return self.get_exists(self); end,
+}
+__target.mt = { 
+	__index = function(self,key)
+		if key == "timestamp" then
+			local value = self.get_timestamp(self)
+			rawset(self, key, value)
+			return value
+		elseif key == "exists" then
+			local value = self.get_exists(self)
+			rawset(self, key, value)
+			return value
+		end
+		return rawget(__target, key)
+	end
+}
+
 
 --[[-------------------------------------------------------------------------
 	Name: 	__target:new()
@@ -90,6 +133,9 @@ end
 	Action:	Add dependencies to the target
 -------------------------------------------------------------------------]]--
 function __target:depends_on(deps_list)
+	if not target:defined(self.name) then 
+		target[self.name] = self; 
+	end
 	for k,v in ipairs(deps_list or {}) do
 		-- string is assumed to be the name of a dependency
 		if type(v) == "string" then
@@ -130,7 +176,7 @@ function __target:bring_up_to_date()
 	if not(self.deps_newer) then self.deps_newer = make.util.target_list:new{}; end
 
 	-- we must build if we don't exist yet
-	local must_build = make.flags.always_make or not(self:exists())
+	local must_build = make.flags.always_make or not(self.exists)
 	local must_wait = false
 
 	-- loop over all dependencies
@@ -146,15 +192,15 @@ function __target:bring_up_to_date()
 		elseif dep_status == make.status.none then
 			-- dependency wasn't updated, but we might still need
 			-- to build if it's newer
-			local self_timestamp = self:timestamp(dep)
-			local dep_timestamp = dep:timestamp()
+			local self_timestamp = self.timestamp
+			local dep_timestamp = dep.timestamp
 			if self_timestamp < dep_timestamp then
 				must_build = true; self.deps_newer[dep_name] = true
 			end
 		elseif dep_status == make.status.error then
 			-- ummm...
-			print("presto: *** Error updating target '".. dep.name .."':")
-			if dep.errmsg then print("presto: *** "..dep.errmsg) end
+			make.error("Error updating target '".. dep.name .."':")
+			if dep.errmsg then make.error(dep.errmsg) end
 			if not make.flags.keep_going then
 				self.status = make.status.error
 				return self.status
@@ -172,17 +218,17 @@ function __target:bring_up_to_date()
 		end
 	end
 
-	-- if any deps failed, then we can't continue (even with -k)
-	if self.dep_status == make.status.error then
-		self.status = make.status.error
-		return self.status
-	end
-
 	-- are any of our children currently building?
 	if must_wait then
 		return make.status.running
 	end
 
+	-- if any deps failed, then we can't continue (even with -k)
+	if self.dep_status == make.status.error then
+		self.status = make.status.error
+		return self.status
+	end
+	
 	-- do we need to build?
 	if must_build then
 		if make.flags.question and self.command ~= phony_target.command then
@@ -195,7 +241,7 @@ function __target:bring_up_to_date()
 		if self.command then
 			-- run the update command
 			return make.jobs.start(self)
-		elseif not(make.flags.always_make) or not(self:exists()) then
+		elseif not(make.flags.always_make) or not(self.exists) then
 			-- don't know how to build; error
 			self.status = make.status.error
 			self.errmsg = "No rule to make target '".. self.name .."'"
@@ -208,15 +254,15 @@ function __target:bring_up_to_date()
 end
 
 --[[-------------------------------------------------------------------------
-	Name: 	__target:timestamp()
-					__target:exists()
+	Name: 	__target:get_timestamp()
+					__target:get_exists()
 	Action:	Default targets use on-disk timestamps
 -------------------------------------------------------------------------]]--
-function __target:timestamp()
-	if make.file.exists(self.name) then return make.file.time(self.name); else return 0; end
+function __target:get_timestamp()
+	return make.file.exists(self.name) and make.file.time(self.name) or 0
 end
-function __target:exists()
-	return make.file.exists(self.name)
+function __target:get_exists()
+	return self.name and make.file.exists(self.name) or false
 end
 
 
@@ -225,7 +271,11 @@ end
 	Action:	Holds all buildable targets, and acts as a prototype for derived
 					target types.  See also __target.
 -------------------------------------------------------------------------]]--
-target = {}
+target = {
+	defined = function(self,key)
+		return rawget(__target,key) ~= nil
+	end
+}
 setmetatable(target, {
 --[[-------------------------------------------------------------------------
 	Name: 		target:__index
@@ -244,8 +294,9 @@ end,
 	Action:		Write access to "target" table
 -------------------------------------------------------------------------]]--
 __newindex = function(self, key, value)
+	if type(key) ~= "string" then error("target name '"..tostring(key).."' must be a string",2) end
 	-- enforce backslash policy
-	if string.match(key,"\\") then error("target name should not contain backslashes",2) end
+	if string.match(key,"\\") then error("target name '"..tostring(key).."' should not contain backslashes",2) end
 	-- prevent redefining protected members (e.g., "target.new")
 	if __target[key] ~= nil then error("cannot modify protected value (or existing target) '"..tostring(key).."'",2) end
 	-- if a function is added as a target, that function is assumed to be the command
@@ -260,17 +311,6 @@ __newindex = function(self, key, value)
 end,
 })
 
-
---[[-------------------------------------------------------------------------
-	Name: 	make.jobs
-	Action:	Holds all of the information necessary to manage background jobs.
--------------------------------------------------------------------------]]--
-make.jobs = {
-	pos = 0,			-- current job number; used for output messages
-	slots = 1,		-- total number of available job slots (-j N)
-	count = 0,		-- current count of running jobs
-	running = {}	-- table of running jobs
-}
 
 --[[-------------------------------------------------------------------------
 	Name: 	make.jobs.dispatch()
@@ -308,8 +348,8 @@ make.jobs.dispatch = function()
 				if not ok then
 					local errmsg = ""
 					for target_name in pairs(job.targets) do errmsg = errmsg .. " '" .. target_name .. "'"; end
-					print("presto: *** Error updating target"..errmsg..".")
-					if handle then print("presto: *** "..handle); end
+					make.error("Error updating target"..errmsg..".")
+					if handle then make.error(handle); end
 					make.exit()
 				end
 
@@ -392,15 +432,16 @@ end
 	Name:		print()
 	Action:	Our new version will prepend every line with the job number
 -------------------------------------------------------------------------]]--
-local oldprint = print
-print = function(p1,...)
-	if make.jobs.current then
-		oldprint(make.jobs.current.id .. ": " .. tostring(p1), ...)
-	else
-		oldprint(p1,...)
+if make.flags.debug then
+	local oldprint = print
+	print = function(p1,...)
+		if make.jobs.current then
+			oldprint(make.jobs.current.id .. ": " .. tostring(p1), ...)
+		else
+			oldprint(p1,...)
+		end
 	end
 end
-
 
 --[[-------------------------------------------------------------------------
 	Name: 	make.update_goals()
@@ -418,7 +459,7 @@ function make.update_goals()
 		-- Failed; let's try to clean up after ourselves.
 		for filename in pairs(make.delete_on_error) do
 			if make.file.exist(filename) then
-				print("presto: *** Unlinking '"..filename.."'")
+				make.error("Unlinking '"..filename.."'")
 				make.file.delete(filename)
 			end
 		end
@@ -461,16 +502,16 @@ function make.update_goals_p()
 				if goal_status == make.status.error then
 					-- goal finished with an error
 					if not make.flags.question then
-						print("presto: *** Error updating goal '".. goal_name .."'.")
+						make.error("Error updating goal '".. goal_name .."'.")
 					end
-					if goal.errmsg then print("presto: *** " .. goal.errmsg) end
+					if goal.errmsg then make.error(goal.errmsg) end
 					make.exit()
 				elseif goal_status == make.status.none then
 					-- goal was already up to date
-					print("presto: *** nothing to be done for '".. goal_name .."'.")
+					make.warning("nothing to be done for '".. goal_name .."'.")
 				else
 					-- goal updated successfully (make.status.updated)
-					print("presto: *** target '".. goal_name .."' is up to date")
+					make.success("target '".. goal_name .."' is up to date")
 				end
 
 				-- done with this target; remove it from the list
@@ -492,7 +533,7 @@ function make.update_goals_p()
 
 	-- if there were any errors, print a final message and exit
 	if make.failure then
-		print("presto: *** One or more targets not remade due to errors.")
+		make.error("One or more targets not remade due to errors.")
 		error("Stop.",0) -- this should be unhandled; will reach the OS
 	end
 end
@@ -508,16 +549,17 @@ end
 function make.exit(exit_code)
 	if not make.flags.keep_going then
 		if make.jobs.count > 0 then
-			print("presto: *** Waiting for other jobs to finish...")
+			make.message("Waiting for other jobs to finish...")
 			while make.jobs.count > 0 do
 				pcall(make.jobs.dispatch) -- use pcall to suck up errors
 			end
-			print("presto: *** One or more targets not remade due to errors.")
+			make.error("One or more targets not remade due to errors.")
 		end
 		error("Stop.",0) -- this should be unhandled; will reach the OS
 	end
 	make.failure = true -- "-k", but the build has failed
 end
+
 
 --[[-------------------------------------------------------------------------
 	Name:		phony_target
@@ -525,7 +567,81 @@ end
 					correspond to actual files on disk.  They are always rebuilt,
 					but they have an "empty" default command so presto won't complain.
 -------------------------------------------------------------------------]]--
-phony_target = target:new{}
-phony_target.command = function() end
-phony_target.exists = function() return false; end
-phony_target.timestamp = function() return 0; end
+local __is_phony_target = {}
+local __phony_target = target:new{}
+__phony_target.exists = false
+__phony_target.timestamp = 0
+__phony_target.command = make.util.nil_command
+
+function phony_target(name)
+	if not target:defined(dir) then
+		target[name] = __phony_target:new{}
+	elseif not target[name][__is_phony_target] then
+		error("can't redefine non-phony target to be a phony target",2)
+	end
+	return target[name]
+end
+
+
+--[[-------------------------------------------------------------------------
+	Name:		dir_target
+	Action:	Target that represents a directory; when used as a dependency, 
+					we will automatically create the directory as required.
+-------------------------------------------------------------------------]]--
+local __is_dir_target = {}
+local __dir_target = target:new{}
+__dir_target[__is_dir_target] = true
+__dir_target.exists = function(self) return make.dir.is_dir(self.name); end
+__dir_target.timestamp = make.beginning_of_time
+__dir_target.command = function(self) 
+	if not make.dir.is_dir(self.name) then
+		if make.flags.noisy then print("mkdir "..make.path.to_os(make.path.quote(self.name))) end
+		make.dir.md(self.name)
+	end
+end
+
+function dir_target(dir)
+	if not target:defined(dir) then
+		target[dir] = __dir_target:new{}
+	elseif not target[dir][__is_dir_target] then
+		error("can't redefine non-directory target to be a directory target",2)
+	end
+	return target[dir]
+end
+
+
+--[[-------------------------------------------------------------------------
+	Name:		make.util.merge_tables
+	Action:	Merge flag arrays and return the result; simple values are 
+					overwritten while "array" values are concatenated.
+-------------------------------------------------------------------------]]--
+function make.util.merge_tables(...)
+	local args = {...}
+	if type(args[1]) ~= "table" then
+		-- non-tables
+		return args[#args]
+	elseif type(args[1][1]) ~= "nil" then
+		-- simple arrays
+		local t = {}
+		for _,srctable in ipairs(args) do
+			for _,v in ipairs(srctable) do 
+				table.insert(t, v)
+			end
+		end
+		return t
+	else
+		-- dictionary
+		local t = {}
+		for _,srctable in ipairs(args) do
+			for k,v in pairs(srctable) do 
+				if t[k] then 
+					t[k] = make.util.merge_tables(t[k], v)
+				else
+					t[k] = make.util.merge_tables(v)
+				end
+			end
+		end
+		return t
+	end
+end
+
